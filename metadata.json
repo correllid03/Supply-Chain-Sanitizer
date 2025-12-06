@@ -1,0 +1,5 @@
+{
+  "name": "Supply Chain Invoice Sanitizer",
+  "description": "An enterprise-grade tool to extract, clean, and export structured data from invoices and packing slips using Gemini AI.",
+  "requestFramePermissions": []
+}
