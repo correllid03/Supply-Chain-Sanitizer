@@ -1,15 +1,17 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { FileUpload } from './components/FileUpload';
 import { InvoiceEditor } from './components/InvoiceEditor';
 import { SessionSidebar } from './components/SessionSidebar';
+import { Navbar } from './components/Navbar';
 import { extractInvoiceData, translateLineItems } from './services/geminiService';
 import { InvoiceData, ProcessingState } from './types';
-import { Loader2, Download, Wand2, ShieldCheck, AlertCircle, Languages, Sun, Moon, Coins } from 'lucide-react';
+import { Loader2, Download, Wand2, ShieldCheck, AlertCircle, Languages, Sun, Moon, Coins, Clock, RefreshCw, FileText, Globe2, Plane, Archive, Layers, AlertTriangle } from 'lucide-react';
 import { translations } from './utils/translations';
+import { EXAMPLES } from './utils/exampleData';
 
 const App: React.FC = () => {
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null);
   const [sessionHistory, setSessionHistory] = useState<InvoiceData[]>([]);
   const [processingState, setProcessingState] = useState<ProcessingState>({ status: 'idle' });
@@ -17,6 +19,11 @@ const App: React.FC = () => {
   const [targetCurrency, setTargetCurrency] = useState<string>('Original');
   const [isTranslating, setIsTranslating] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
+  const [retryCountdown, setRetryCountdown] = useState<number>(0);
+  const [showMobileHistory, setShowMobileHistory] = useState(false);
+  const [exportNotification, setExportNotification] = useState<string | null>(null);
+  const [isDemoMode, setIsDemoMode] = useState(false);
+  const [showHomeConfirm, setShowHomeConfirm] = useState(false);
 
   // Get current translations
   const t = translations[targetLanguage] || translations['English'];
@@ -24,119 +31,225 @@ const App: React.FC = () => {
   // Toggle theme handler
   const toggleTheme = () => setIsDarkMode(!isDarkMode);
 
-  const handleFileSelect = (selectedFile: File) => {
-    setFile(selectedFile);
+  // Determine current view for Navbar
+  const currentView = invoiceData ? 'editor' : (processingState.status === 'processing' || processingState.status === 'quota_cooldown') ? 'processing' : 'home';
+
+  const handleFileSelect = (selectedFiles: File[]) => {
+    setFiles(selectedFiles);
     // Don't clear invoiceData immediately to allow viewing history while uploading
     setProcessingState({ status: 'idle' });
+    setRetryCountdown(0);
   };
 
   const handleClearFile = () => {
-    setFile(null);
-    // Only clear if we are starting a fresh flow, but typically we might want to stay on the current view
+    setFiles([]);
     setProcessingState({ status: 'idle' });
+    setRetryCountdown(0);
+  };
+
+  const handleError = (message: string, code: any) => {
+      setProcessingState({
+          status: 'error',
+          message: message,
+          errorCode: code
+      });
+  };
+
+  const handleLoadExample = async (key: string) => {
+    const dummyFile = new File(["dummy_content"], `${key}_example.jpg`, { type: "image/jpeg" });
+    setFiles([dummyFile]);
+    setProcessingState({ status: 'processing', message: t.analyzing });
+    await new Promise(r => setTimeout(r, 1200));
+    setProcessingState(prev => ({ ...prev, message: t.sanitizing }));
+    await new Promise(r => setTimeout(r, 1200));
+
+    const data = EXAMPLES[key];
+    if (data) {
+        const dataWithId: InvoiceData = { 
+            ...data, 
+            id: crypto.randomUUID(),
+            language: data.language || 'Original',
+            originalLineItems: data.lineItems
+        };
+        setInvoiceData(dataWithId);
+        setSessionHistory(prev => [dataWithId, ...prev]);
+        setProcessingState({ status: 'complete' });
+        
+        if (key === 'multilang') setTargetLanguage('Original');
+        if (key === 'receipt') setTargetLanguage('English');
+    }
   };
 
   const handleSanitize = async () => {
-    if (!file) return;
+    if (files.length === 0) return;
 
-    setProcessingState({ status: 'processing', message: t.processing });
+    setProcessingState({ status: 'processing', message: t.processing }); 
     
-    try {
-      const data = await extractInvoiceData(file);
-      // Assign a unique ID for the session and default language
-      const dataWithId: InvoiceData = { 
-        ...data, 
-        id: crypto.randomUUID(),
-        language: 'Original',
-        originalLineItems: data.lineItems // Snapshot original data
-      };
-      
-      setInvoiceData(dataWithId);
-      setSessionHistory(prev => [dataWithId, ...prev]);
-      setProcessingState({ status: 'complete' });
-      // Removed setTargetLanguage and setTargetCurrency resets to persist user selection
-    } catch (error) {
-      setProcessingState({ 
-        status: 'error', 
-        message: t.uploadError 
-      });
+    // Batch Processing Logic
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const startTime = Date.now();
+        
+        // Update status for batch
+        if (files.length > 1) {
+             setProcessingState(prev => ({ 
+                 ...prev, 
+                 message: t.processingBatch
+                    .replace('{current}', (i + 1).toString())
+                    .replace('{total}', files.length.toString())
+                    .replace('{filename}', file.name)
+             }));
+        } else {
+             // Sequential messages for single file
+             setTimeout(() => {
+                if (processingState.status !== 'error') setProcessingState(prev => ({ ...prev, message: t.analyzing }));
+            }, 1500);
+            setTimeout(() => {
+                if (processingState.status !== 'error') setProcessingState(prev => ({ ...prev, message: t.sanitizing }));
+            }, 3500);
+        }
+
+        try {
+            // Pass isDemoMode to extraction service
+            const data = await extractInvoiceData(file, isDemoMode);
+            const endTime = Date.now();
+            const processingTimeMs = endTime - startTime;
+
+            const dataWithId: InvoiceData = { 
+                ...data, 
+                id: crypto.randomUUID(),
+                language: 'Original',
+                originalLineItems: data.lineItems,
+                processingTimeMs,
+                isDemo: isDemoMode // Flag as demo
+            };
+            
+            // If it's the last file (or only file), set it as active
+            if (i === files.length - 1) {
+                setInvoiceData(dataWithId);
+            }
+            setSessionHistory(prev => [dataWithId, ...prev]);
+
+            // Rate limiting delay between batch items
+            if (i < files.length - 1) {
+                await new Promise(r => setTimeout(r, 2000));
+            }
+
+        } catch (error: any) {
+            const code = error.code || 'GENERIC';
+            let message = t.uploadError;
+            
+            if (code === 'QUOTA_EXCEEDED') {
+                message = t.quotaError;
+                setRetryCountdown(60); 
+                setProcessingState({ status: 'quota_cooldown', message: message, errorCode: code, retryIn: 60 });
+                // If quota exceeded, we stop the batch
+                return;
+            } else if (code === 'READ_ERROR') message = t.readError;
+            else if (code === 'INVALID_FILE') message = t.fileTypeError;
+
+            setProcessingState({ status: 'error', message: message, errorCode: code });
+            // Stop batch on critical error for now
+            return;
+        }
     }
+
+    setProcessingState({ status: 'complete' });
+    setRetryCountdown(0);
+    setFiles([]); // Auto-clear to allow continuous processing
   };
 
+  useEffect(() => {
+    if (processingState.status === 'quota_cooldown' && retryCountdown > 0) {
+        const timer = setTimeout(() => setRetryCountdown(prev => prev - 1), 1000);
+        return () => clearTimeout(timer);
+    } else if (processingState.status === 'quota_cooldown' && retryCountdown === 0) {
+        handleSanitize();
+    }
+  }, [processingState.status, retryCountdown]);
+
   const handleInvoiceChange = (newData: InvoiceData) => {
-    // If we are editing in 'Original' mode, update the backup so future translations are correct
     if (targetLanguage === 'Original' || newData.language === 'Original') {
       newData.originalLineItems = newData.lineItems;
     }
-
     setInvoiceData(newData);
-    // Sync changes back to history
     setSessionHistory(prev => prev.map(item => item.id === newData.id ? newData : item));
   };
 
   const handleHistorySelect = (data: InvoiceData) => {
       setInvoiceData(data);
-      // When selecting history, if the data language matches a target, sync dropdown
       if (data.language && ['English', 'Spanish', 'French', 'German', 'Chinese', 'Japanese', 'Portuguese', 'Turkish', 'Polish', 'Hindi', 'Arabic'].includes(data.language)) {
           setTargetLanguage(data.language);
       } else {
           setTargetLanguage('Original');
       }
       setProcessingState({ status: 'complete' });
+      setShowMobileHistory(false);
   };
+
+  // --- Navigation Logic ---
+  const handleNavigateHome = () => {
+    if (invoiceData) {
+        setShowHomeConfirm(true);
+    } else {
+        console.log("Clearing state...");
+        setFiles([]);
+        setInvoiceData(null);
+        setProcessingState({ status: 'idle' });
+        console.log("State cleared!");
+    }
+  };
+
+  const confirmNavigateHome = () => {
+    setFiles([]);
+    setInvoiceData(null);
+    setProcessingState({ status: 'idle' });
+    setShowHomeConfirm(false);
+  };
+
+  const cancelNavigateHome = () => {
+    setShowHomeConfirm(false);
+  };
+
+  const handleNewInvoice = useCallback(() => {
+    if (invoiceData) {
+        if (!window.confirm(t.unsavedChanges)) return;
+    }
+    setFiles([]);
+    setInvoiceData(null);
+    setProcessingState({ status: 'idle' });
+    setShowMobileHistory(false);
+  }, [invoiceData, t.unsavedChanges]);
+
 
   const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setTargetLanguage(e.target.value);
   };
 
-  // Auto-Trigger Translation Effect
-  // This watches for changes in the active document ID or the target language.
   useEffect(() => {
     if (!invoiceData?.id || !targetLanguage) return;
-
-    // Logic: Revert to Original
     if (targetLanguage === 'Original') {
       if (invoiceData.language !== 'Original') {
-        // Restore from backup if available, otherwise just keep current (fallback)
         const originalItems = invoiceData.originalLineItems || invoiceData.lineItems;
-        const revertedData = { 
-          ...invoiceData, 
-          lineItems: originalItems, 
-          language: 'Original' 
-        };
-        
-        // Update State
+        const revertedData = { ...invoiceData, lineItems: originalItems, language: 'Original' };
         setInvoiceData(revertedData);
         setSessionHistory(prev => prev.map(item => item.id === invoiceData.id ? revertedData : item));
       }
       return;
     }
-
-    // Logic: Translate to Target
     if (invoiceData.language !== targetLanguage) {
       const autoTranslate = async () => {
         setIsTranslating(true);
         try {
-          // Always translate from the SOURCE OF TRUTH (Original) to avoid translation degradation
           const sourceItems = invoiceData.originalLineItems || invoiceData.lineItems;
           const translatedItems = await translateLineItems(sourceItems, targetLanguage);
-          
           const updatedData = { 
             ...invoiceData, 
             lineItems: translatedItems, 
             language: targetLanguage,
-            // Ensure we persist the original backup if it wasn't there
             originalLineItems: invoiceData.originalLineItems || sourceItems 
           };
-          
-          // Safer state update
-          setInvoiceData(current => {
-            if (current?.id === invoiceData.id) {
-              return updatedData;
-            }
-            return current;
-          });
-
+          setInvoiceData(current => current?.id === invoiceData.id ? updatedData : current);
           setSessionHistory(prev => prev.map(item => item.id === invoiceData.id ? updatedData : item));
         } catch (error) {
           console.error("Auto-translation error:", error);
@@ -152,24 +265,9 @@ const App: React.FC = () => {
     setTargetCurrency(e.target.value);
   };
 
-  const handleDownloadCSV = () => {
+  const handleDownloadCSV = useCallback(() => {
     if (!invoiceData) return;
-
-    // Use translated headers
-    const headers = [
-      t.csvDocumentType,
-      t.csvVendor,
-      t.csvDate,
-      t.csvTotalAmount,
-      t.csvCurrency,
-      t.csvSku,
-      t.csvDescription,
-      t.csvGlCategory,
-      t.csvQuantity,
-      t.csvUnitPrice,
-      t.csvLineTotal
-    ];
-
+    const headers = [t.csvDocumentType, t.csvVendor, t.csvDate, t.csvTotalAmount, t.csvCurrency, t.csvSku, t.csvDescription, t.csvGlCategory, t.csvQuantity, t.csvUnitPrice, t.csvLineTotal];
     const rows = invoiceData.lineItems.map(item => [
       `"${(invoiceData.documentType || 'Unknown').replace(/"/g, '""')}"`,
       `"${invoiceData.vendorName.replace(/"/g, '""')}"`,
@@ -183,18 +281,98 @@ const App: React.FC = () => {
       item.unitPrice,
       (item.totalAmount || 0).toFixed(2)
     ]);
-
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.join(','))
-    ].join('\n');
-
+    const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
     const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
     link.setAttribute('download', `sanitized_${(invoiceData.documentType || 'doc').toLowerCase().replace(/\s/g, '_')}_${invoiceData.vendorName || 'export'}.csv`);
-    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setExportNotification(`✓ ${t.batchComplete} (${invoiceData.lineItems.length} items)`);
+    setTimeout(() => setExportNotification(null), 3000);
+  }, [invoiceData, t]);
+
+  // Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+        const isCmd = e.metaKey || e.ctrlKey;
+        if (isCmd) {
+            switch(e.key.toLowerCase()) {
+                case 'n':
+                    e.preventDefault();
+                    handleNewInvoice();
+                    break;
+                case 'e':
+                    e.preventDefault();
+                    handleDownloadCSV();
+                    break;
+                case 't':
+                    e.preventDefault();
+                    setTargetLanguage(prev => prev === 'Original' ? 'English' : 'Original');
+                    break;
+                case 'c':
+                    e.preventDefault();
+                    setTargetCurrency(prev => prev === 'Original' ? 'USD' : 'Original');
+                    break;
+                case 'h':
+                    e.preventDefault();
+                    setShowMobileHistory(prev => !prev);
+                    break;
+                case 'home':
+                    e.preventDefault();
+                    handleNavigateHome(); // Updated to check for confirmation
+                    break;
+            }
+        }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleNewInvoice, handleDownloadCSV]);
+
+  const handleDownloadJSON = () => {
+      if (!invoiceData) return;
+      const jsonContent = JSON.stringify(invoiceData, null, 2);
+      const blob = new Blob([jsonContent], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `data_${invoiceData.vendorName}.json`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+  };
+
+  const handleExportAll = () => {
+    if (sessionHistory.length === 0) return;
+    
+    // Combined CSV Export
+    const headers = [t.csvDocumentType, t.csvVendor, t.csvDate, t.csvTotalAmount, t.csvCurrency, t.csvSku, t.csvDescription, t.csvGlCategory, t.csvQuantity, t.csvUnitPrice, t.csvLineTotal];
+    
+    // Flatten all items from all documents
+    const allRows = sessionHistory.flatMap(doc => {
+        return doc.lineItems.map(item => [
+            `"${(doc.documentType || 'Unknown').replace(/"/g, '""')}"`,
+            `"${doc.vendorName.replace(/"/g, '""')}"`,
+            doc.invoiceDate,
+            doc.totalAmount,
+            doc.currencySymbol || '$',
+            `"${(item.sku || '').replace(/"/g, '""')}"`,
+            `"${item.description.replace(/"/g, '""')}"`,
+            `"${(item.glCategory || '').replace(/"/g, '""')}"`,
+            item.quantity,
+            item.unitPrice,
+            (item.totalAmount || 0).toFixed(2)
+        ]);
+    });
+
+    const csvContent = [headers.join(','), ...allRows.map(row => row.join(','))].join('\n');
+    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `combined_export_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -207,214 +385,222 @@ const App: React.FC = () => {
         className="h-screen overflow-hidden transition-colors duration-500 bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-[#0f172a] dark:via-[#1e293b] dark:to-[#0f172a] text-slate-900 dark:text-slate-100 flex flex-col font-sans selection:bg-indigo-500/30"
       >
         
-        {/* Header */}
-        <header className="border-b border-slate-200 dark:border-white/5 bg-white/70 dark:bg-slate-900/40 backdrop-blur-md sticky top-0 z-50 transition-colors duration-500 shrink-0">
-          <div className="w-full px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <div className="p-2 bg-gradient-to-br from-indigo-600 to-blue-600 rounded-lg shadow-lg shadow-indigo-500/20 ring-1 ring-black/5 dark:ring-white/10">
-                <ShieldCheck className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white leading-none">
-                  {t.appTitle} <span className="text-indigo-600 dark:text-indigo-400">{t.sanitizer}</span>
-                </h1>
-              </div>
-            </div>
-            <div className="flex items-center space-x-4">
-              
-              {/* Theme Toggle */}
-              <button 
-                onClick={toggleTheme}
-                className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-white hover:bg-slate-50 dark:hover:bg-slate-700 transition-all shadow-sm focus:outline-none group"
-                title={t.toggleTheme}
-              >
-                {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4 group-hover:text-black" />}
-              </button>
+        {/* Navigation Bar */}
+        <Navbar 
+          t={t}
+          isDarkMode={isDarkMode}
+          toggleTheme={toggleTheme}
+          currentView={currentView}
+          vendorName={invoiceData?.vendorName}
+          totalAmount={invoiceData?.totalAmount}
+          currencySymbol={invoiceData?.currencySymbol}
+          onNavigateHome={handleNavigateHome}
+          onNewInvoice={handleNewInvoice}
+          onToggleHistory={() => setShowMobileHistory(!showMobileHistory)}
+          targetCurrency={targetCurrency}
+          onCurrencyChange={handleCurrencyChange}
+          targetLanguage={targetLanguage}
+          onLanguageChange={handleLanguageChange}
+          isTranslating={isTranslating}
+        />
 
-              {/* Currency Dropdown */}
-              <div className="hidden sm:flex items-center space-x-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm group">
-                  <Coins className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors" />
-                  <div className="flex flex-col">
-                    <label htmlFor="currency-select" className="text-[9px] text-slate-500 dark:text-slate-400 font-bold uppercase leading-none mb-0.5">
-                      {t.targetCurrency}
-                    </label>
-                    <select 
-                      id="currency-select"
-                      value={targetCurrency}
-                      onChange={handleCurrencyChange}
-                      className="bg-transparent text-xs font-bold text-black dark:text-white focus:outline-none cursor-pointer pr-1 min-w-[60px]"
-                    >
-                      <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="Original">{t.original}</option>
-                      <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="USD">USD ($)</option>
-                      <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="EUR">EUR (€)</option>
-                      <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="GBP">GBP (£)</option>
-                      <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="JPY">JPY (¥)</option>
-                      <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="CNY">CNY (¥)</option>
-                      <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="MXN">MXN ($)</option>
-                      <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="BRL">BRL (R$)</option>
-                      <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="TRY">TRY (₺)</option>
-                      <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="PLN">PLN (zł)</option>
-                      <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="INR">INR (₹)</option>
-                    </select>
-                  </div>
-              </div>
-
-              {/* Translation Dropdown */}
-              <div className="flex items-center space-x-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm group">
-                {isTranslating ? (
-                  <Loader2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400 animate-spin" />
-                ) : (
-                  <Languages className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors" />
-                )}
-                <div className="flex flex-col">
-                  <label htmlFor="language-select" className="text-[9px] text-slate-500 dark:text-slate-400 font-bold uppercase leading-none mb-0.5">
-                    {t.translateTo}
-                  </label>
-                  <select 
-                    id="language-select"
-                    value={targetLanguage}
-                    onChange={handleLanguageChange}
-                    disabled={isTranslating}
-                    className="bg-transparent text-xs font-bold text-black dark:text-white focus:outline-none disabled:opacity-50 cursor-pointer pr-1 min-w-[80px]"
-                  >
-                    <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="Original">{t.original}</option>
-                    <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="English">English</option>
-                    <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="Spanish">Spanish</option>
-                    <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="French">French</option>
-                    <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="German">German</option>
-                    <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="Chinese">Chinese</option>
-                    <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="Japanese">Japanese</option>
-                    <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="Portuguese">Portuguese</option>
-                    <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="Turkish">Turkish</option>
-                    <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="Polish">Polish</option>
-                    <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="Hindi">Hindi</option>
-                    <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="Arabic">Arabic</option>
-                  </select>
-                </div>
-              </div>
-            </div>
+        {/* Global Demo Mode Banner */}
+        {isDemoMode && (
+          <div className="bg-amber-500 text-white text-xs font-bold uppercase tracking-widest text-center py-1.5 shadow-md sticky top-16 z-40 animate-in slide-in-from-top duration-300 flex items-center justify-center space-x-2">
+            <AlertTriangle className="w-3.5 h-3.5 text-white" />
+            <span>⚠️ DEMO MODE ACTIVE - Using sample data (No API usage)</span>
           </div>
-        </header>
+        )}
 
         {/* Split Layout */}
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 overflow-hidden relative">
             
-            {/* Sidebar - 20% Width */}
-            <aside className="w-1/5 min-w-[250px] hidden lg:block h-full overflow-hidden">
+            {/* Sidebar (Desktop) */}
+            <aside className="hidden lg:block w-[250px] shrink-0 h-full overflow-hidden border-r border-slate-200 dark:border-white/5 bg-white/50 dark:bg-slate-900/50 backdrop-blur-xl">
                 <SessionSidebar 
                     history={sessionHistory} 
                     currentId={invoiceData?.id} 
                     onSelect={handleHistorySelect}
+                    onNewInvoice={handleNewInvoice}
+                    onExportAll={handleExportAll}
                     t={t}
+                    isDemoMode={isDemoMode}
+                    onToggleDemoMode={() => setIsDemoMode(!isDemoMode)}
                 />
             </aside>
 
+            {/* Sidebar (Mobile Drawer) */}
+            {showMobileHistory && (
+                <div className="absolute inset-0 z-40 lg:hidden flex">
+                    <div 
+                        className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+                        onClick={() => setShowMobileHistory(false)}
+                    />
+                    <aside className="relative w-[80%] max-w-[300px] h-full bg-white dark:bg-slate-900 shadow-2xl animate-in slide-in-from-left duration-300">
+                        <SessionSidebar 
+                            history={sessionHistory} 
+                            currentId={invoiceData?.id} 
+                            onSelect={handleHistorySelect}
+                            onNewInvoice={handleNewInvoice}
+                            onExportAll={handleExportAll}
+                            t={t}
+                            isDemoMode={isDemoMode}
+                            onToggleDemoMode={() => setIsDemoMode(!isDemoMode)}
+                        />
+                    </aside>
+                </div>
+            )}
+
             {/* Main Content Area */}
-            <main className="flex-1 w-full lg:w-4/5 overflow-y-auto p-4 sm:p-6 lg:p-8">
-                <div className="max-w-5xl mx-auto space-y-8 pb-10">
+            <main className="flex-1 w-full overflow-y-auto p-4 sm:p-6 lg:p-8">
+                <div className="max-w-[1600px] mx-auto space-y-8 pb-10">
                     
                     {/* Hero (Empty State) */}
-                    {!invoiceData && sessionHistory.length === 0 && (
-                        <div className="text-center space-y-6 mb-12 py-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
-                        <h2 className="text-4xl md:text-5xl font-bold text-slate-900 dark:text-white tracking-tight">
-                            {t.heroTitle} <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-blue-600 dark:from-indigo-400 dark:to-blue-400">{t.financialData}</span>
-                        </h2>
-                        <p className="text-slate-600 dark:text-slate-400 text-lg max-w-2xl mx-auto leading-relaxed">
-                            {t.heroSubtitle}
-                        </p>
+                    {currentView === 'home' && (
+                        <div className="text-center space-y-8 mb-12 py-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                            <div className="space-y-4">
+                                <h2 className="text-4xl md:text-5xl font-bold text-slate-900 dark:text-white tracking-tight">
+                                    {t.heroTitle} <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-blue-600 dark:from-indigo-400 dark:to-blue-400">{t.financialData}</span>
+                                </h2>
+                                <p className="text-slate-600 dark:text-slate-400 text-lg max-w-2xl mx-auto leading-relaxed">
+                                    {t.heroSubtitle}
+                                </p>
+                            </div>
+                            <div className="flex flex-wrap items-center justify-center gap-4 animate-in fade-in zoom-in duration-500 delay-200">
+                                <span className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide mr-2">{t.tryExample}</span>
+                                <button onClick={() => handleLoadExample('receipt')} className="px-4 py-2 bg-white/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-800 rounded-lg shadow-sm flex items-center space-x-2 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-all hover:-translate-y-0.5 hover:shadow-md">
+                                    <FileText className="w-4 h-4 text-emerald-500" /><span>{t.exampleReceipt}</span>
+                                </button>
+                                <button onClick={() => handleLoadExample('multilang')} className="px-4 py-2 bg-white/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-800 rounded-lg shadow-sm flex items-center space-x-2 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-all hover:-translate-y-0.5 hover:shadow-md">
+                                    <Globe2 className="w-4 h-4 text-indigo-500" /><span>{t.exampleMultilang}</span>
+                                </button>
+                                <button onClick={() => handleLoadExample('multicurrency')} className="px-4 py-2 bg-white/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-800 rounded-lg shadow-sm flex items-center space-x-2 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-all hover:-translate-y-0.5 hover:shadow-md">
+                                    <Plane className="w-4 h-4 text-orange-500" /><span>{t.exampleCurrency}</span>
+                                </button>
+                            </div>
                         </div>
                     )}
 
-                    {/* Upload Section */}
-                    <div className={`transition-all duration-700 ease-in-out ${invoiceData ? 'grid grid-cols-1 lg:grid-cols-4 gap-8' : 'max-w-3xl mx-auto'}`}>
+                    {/* Content Grid */}
+                    <div className={`transition-all duration-700 ease-in-out ${currentView === 'editor' ? 'grid grid-cols-1 lg:grid-cols-5 gap-8' : 'max-w-3xl mx-auto'}`}>
                         
                         {/* Left Panel: Upload & Actions */}
-                        <div className={`space-y-6 ${invoiceData ? 'lg:col-span-1' : 'w-full'}`}>
-                        <FileUpload 
-                            onFileSelect={handleFileSelect} 
-                            selectedFile={file} 
-                            onClearFile={handleClearFile}
-                            disabled={processingState.status === 'processing'}
-                            t={t}
-                        />
+                        <div className={`space-y-6 ${currentView === 'editor' ? 'lg:col-span-1' : 'w-full'}`}>
+                            
+                            {/* Always show FileUpload - handles Mixed Mode and Home view */}
+                            <FileUpload 
+                                onFileSelect={handleFileSelect} 
+                                selectedFiles={files} 
+                                onClearFile={handleClearFile}
+                                disabled={processingState.status === 'processing' || processingState.status === 'quota_cooldown'}
+                                onError={handleError}
+                                t={t}
+                                isDemoMode={isDemoMode}
+                                onToggleDemoMode={() => setIsDemoMode(!isDemoMode)}
+                            />
 
-                        {/* Error Message */}
-                        {processingState.status === 'error' && (
-                            <div className="p-4 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl flex items-start space-x-3 text-red-600 dark:text-red-400 animate-in fade-in slide-in-from-top-2">
-                            <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-                            <p className="text-sm font-medium">{processingState.message}</p>
-                            </div>
-                        )}
-
-                        {/* Sanitize Action */}
-                        {file && (!invoiceData || processingState.status === 'idle') && processingState.status !== 'processing' && (
-                            <button
-                            onClick={handleSanitize}
-                            className="w-full py-4 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white rounded-xl font-bold tracking-wide shadow-lg shadow-indigo-500/25 flex items-center justify-center space-x-2 transition-all transform hover:scale-[1.02] active:scale-[0.98] ring-1 ring-white/10"
-                            >
-                            <Wand2 className="w-5 h-5" />
-                            <span>{t.sanitizeAction}</span>
-                            </button>
-                        )}
-
-                        {/* Loading State */}
-                        {processingState.status === 'processing' && (
-                            <div className="text-center py-10 space-y-4 bg-white/50 dark:bg-slate-800/20 rounded-xl border border-slate-200 dark:border-white/5 backdrop-blur-sm">
-                            <div className="relative">
-                                <div className="absolute inset-0 bg-indigo-500 blur-xl opacity-20 animate-pulse rounded-full"></div>
-                                <Loader2 className="w-10 h-10 text-indigo-600 dark:text-indigo-400 animate-spin mx-auto relative z-10" />
-                            </div>
-                            <p className="text-sm font-medium text-indigo-600 dark:text-indigo-300 animate-pulse tracking-wide">{processingState.message}</p>
-                            </div>
-                        )}
-                        
-                        {/* Current File Preview Context */}
-                        {invoiceData && (
-                            <div className="bg-white/60 dark:bg-slate-800/40 backdrop-blur-sm p-5 rounded-xl border border-slate-200 dark:border-white/5 text-sm text-slate-500 dark:text-slate-400 shadow-xl dark:shadow-lg transition-colors duration-500">
-                                <p className="font-bold text-slate-800 dark:text-slate-300 mb-3 uppercase tracking-wider text-xs">{t.activeDoc}</p>
-                                <div className="flex items-center space-x-3 mb-4">
-                                    <div className="p-2 bg-slate-100 dark:bg-slate-700/50 rounded-lg">
-                                        <ShieldCheck className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                            {/* Error & Quota Messages */}
+                            {processingState.status === 'error' && (
+                                <div className="p-4 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl space-y-3 animate-in fade-in slide-in-from-top-2">
+                                    <div className="flex items-start space-x-3 text-red-600 dark:text-red-400">
+                                        <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                                        <p className="text-sm font-medium">{processingState.message}</p>
                                     </div>
-                                    <div className="overflow-hidden">
-                                        <p className="truncate font-medium text-slate-800 dark:text-slate-200">{invoiceData.vendorName}</p>
-                                        <p className="text-xs mt-0.5 text-slate-500">{invoiceData.documentType}</p>
+                                    <button onClick={handleSanitize} className="w-full py-2 text-xs font-bold uppercase tracking-wide bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-200 dark:hover:bg-red-500/30 transition-colors flex items-center justify-center space-x-2">
+                                        <RefreshCw className="w-3.5 h-3.5" /><span>{t.tryAgain}</span>
+                                    </button>
+                                </div>
+                            )}
+
+                            {processingState.status === 'quota_cooldown' && (
+                                <div className="p-4 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl space-y-2 animate-in fade-in slide-in-from-top-2">
+                                    <div className="flex items-start space-x-3 text-amber-600 dark:text-amber-400">
+                                        <Clock className="w-5 h-5 shrink-0 mt-0.5" />
+                                        <div className="flex-1">
+                                            <p className="text-sm font-bold">{processingState.message}</p>
+                                            <p className="text-xs mt-1 opacity-80">{t.quotaCooldown} <span className="font-mono font-bold">{retryCountdown}s</span>...</p>
+                                        </div>
+                                    </div>
+                                    <div className="w-full bg-amber-200 dark:bg-amber-500/20 rounded-full h-1.5 overflow-hidden">
+                                        <div className="bg-amber-500 h-full transition-all duration-1000 ease-linear" style={{ width: `${(retryCountdown / 60) * 100}%` }}></div>
                                     </div>
                                 </div>
-                                <button 
-                                    onClick={handleClearFile} 
-                                    className="w-full py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-slate-700/30 hover:bg-slate-200 dark:hover:bg-slate-700/50 rounded-lg transition-all border border-transparent hover:border-slate-300 dark:hover:border-slate-600"
+                            )}
+
+                            {/* Sanitize Action */}
+                            {files.length > 0 && (!invoiceData || processingState.status === 'idle') && processingState.status !== 'processing' && processingState.status !== 'quota_cooldown' && (
+                                <button
+                                onClick={handleSanitize}
+                                className="w-full py-4 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white rounded-xl font-bold tracking-wide shadow-lg shadow-indigo-500/25 flex items-center justify-center space-x-2 transition-all transform hover:scale-[1.02] active:scale-[0.98] ring-1 ring-white/10"
                                 >
-                                    {t.sanitizeNew}
+                                {files.length > 1 ? <Layers className="w-5 h-5" /> : <Wand2 className="w-5 h-5" />}
+                                <span>{files.length > 1 ? t.sanitizeBatch.replace('{count}', files.length.toString()) : t.sanitizeAction}</span>
                                 </button>
-                            </div>
-                        )}
+                            )}
+
+                            {/* Loading State */}
+                            {processingState.status === 'processing' && (
+                                <div className="text-center py-10 space-y-4 bg-white/50 dark:bg-slate-800/20 rounded-xl border border-slate-200 dark:border-white/5 backdrop-blur-sm">
+                                <div className="relative">
+                                    <div className="absolute inset-0 bg-indigo-500 blur-xl opacity-20 animate-pulse rounded-full"></div>
+                                    <Loader2 className="w-10 h-10 text-indigo-600 dark:text-indigo-400 animate-spin mx-auto relative z-10" />
+                                </div>
+                                <p className="text-sm font-medium text-indigo-600 dark:text-indigo-300 animate-pulse tracking-wide transition-all duration-300">{processingState.message}</p>
+                                </div>
+                            )}
+                            
+                            {/* Active Document Context Card (Left Sidebar when Editor is Active) */}
+                            {currentView === 'editor' && invoiceData && (
+                                <div className="bg-white/60 dark:bg-slate-800/40 backdrop-blur-sm p-4 rounded-xl border border-slate-200 dark:border-white/5 text-sm text-slate-500 dark:text-slate-400 shadow-xl dark:shadow-lg transition-colors duration-500">
+                                    <p className="font-bold text-slate-800 dark:text-slate-300 mb-3 uppercase tracking-wider text-[10px]">{t.activeDoc}</p>
+                                    <div className="flex items-center space-x-3 mb-4">
+                                        <div className="p-2 bg-slate-100 dark:bg-slate-700/50 rounded-lg shrink-0">
+                                            <ShieldCheck className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                                        </div>
+                                        <div className="overflow-hidden min-w-0">
+                                            <p className="truncate font-medium text-slate-800 dark:text-slate-200 text-xs">{invoiceData.vendorName}</p>
+                                            <p className="text-[10px] mt-0.5 text-slate-500">{invoiceData.documentType}</p>
+                                        </div>
+                                    </div>
+                                    {/* Action buttons moved to Navbar/Sidebar, leaving this as status card */}
+                                </div>
+                            )}
                         </div>
 
                         {/* Right Panel: Editor */}
-                        {invoiceData && (
-                        <div className="lg:col-span-3 space-y-6">
+                        {currentView === 'editor' && invoiceData && (
+                        <div className="lg:col-span-4 space-y-6 min-w-0 animate-in fade-in slide-in-from-right-4 duration-500">
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                            <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-wide flex items-center">
-                                <span className="w-2 h-6 bg-indigo-500 rounded-full mr-3"></span>
-                                {t.extractedData}
-                            </h2>
-                            <div className="flex items-center space-x-4">
-                                {isTranslating && (
-                                    <span className="flex items-center text-xs font-semibold text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/10 px-3 py-1.5 rounded-full animate-pulse border border-indigo-200 dark:border-indigo-500/20">
-                                        <Languages className="w-3 h-3 mr-2" />
-                                        {t.translating}
-                                    </span>
-                                )}
-                                <button
-                                onClick={handleDownloadCSV}
-                                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 rounded-lg flex items-center space-x-2 transition-all font-semibold text-sm transform hover:-translate-y-0.5"
-                                >
-                                <Download className="w-4 h-4" />
-                                <span>{t.exportCsv}</span>
-                                </button>
+                                <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-wide flex items-center">
+                                    <span className="w-2 h-6 bg-indigo-500 rounded-full mr-3"></span>
+                                    {t.extractedData}
+                                </h2>
+                                <div className="flex items-center space-x-4">
+                                    {isTranslating && (
+                                        <span className="flex items-center text-xs font-semibold text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/10 px-3 py-1.5 rounded-full animate-pulse border border-indigo-200 dark:border-indigo-500/20">
+                                            <Languages className="w-3 h-3 mr-2" />
+                                            {t.translating}
+                                        </span>
+                                    )}
+                                    <button onClick={handleDownloadJSON} className="px-3 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg flex items-center space-x-2 transition-all font-semibold text-xs border border-slate-200 dark:border-slate-700">
+                                        <FileText className="w-4 h-4" />
+                                        <span className="hidden sm:inline">JSON</span>
+                                    </button>
+                                    <button
+                                    onClick={handleDownloadCSV}
+                                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 rounded-lg flex items-center space-x-2 transition-all font-semibold text-sm transform hover:-translate-y-0.5"
+                                    >
+                                    <Download className="w-4 h-4" />
+                                    <span>{t.exportCsv}</span>
+                                    </button>
+                                </div>
                             </div>
-                            </div>
+
+                            {exportNotification && (
+                                <div className="p-3 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-lg text-emerald-700 dark:text-emerald-400 text-xs font-bold text-center animate-in fade-in slide-in-from-top-2 duration-300">
+                                    {exportNotification}
+                                </div>
+                            )}
                             
                             <InvoiceEditor 
                               data={invoiceData} 
@@ -428,6 +614,46 @@ const App: React.FC = () => {
                 </div>
             </main>
         </div>
+
+        {/* Confirmation Modal */}
+        {showHomeConfirm && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                <div 
+                    className="absolute inset-0 bg-black/40 dark:bg-black/60 backdrop-blur-sm transition-opacity"
+                    onClick={cancelNavigateHome}
+                />
+                <div className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200">
+                    <div className="flex items-start space-x-4">
+                        <div className="p-3 bg-amber-100 dark:bg-amber-500/10 rounded-full shrink-0">
+                            <AlertTriangle className="w-6 h-6 text-amber-600 dark:text-amber-500" />
+                        </div>
+                        <div className="flex-1">
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">
+                                Unsaved Changes
+                            </h3>
+                            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                                You have unsaved changes. Starting a new invoice will lose your current work. Are you sure you want to continue?
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <div className="mt-8 flex items-center justify-end space-x-3">
+                        <button
+                            onClick={cancelNavigateHome}
+                            className="px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={confirmNavigateHome}
+                            className="px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-500 rounded-lg shadow-lg shadow-red-500/20 transition-all transform hover:-translate-y-0.5"
+                        >
+                            Start New Invoice
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
       </div>
     </div>
   );

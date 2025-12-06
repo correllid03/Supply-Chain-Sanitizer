@@ -23,7 +23,7 @@ const invoiceSchema = {
         properties: {
           sku: { type: Type.STRING, description: "Stock Keeping Unit or Product Code." },
           description: { type: Type.STRING, description: "Description of the item." },
-          glCategory: { type: Type.STRING, description: "Inferred General Ledger category based on item description (e.g., 'Raw Materials', 'Office Supplies', 'Maintenance', 'IT Equipment', 'Services')." },
+          glCategory: { type: Type.STRING, description: "Inferred General Ledger category based on item description." },
           quantity: { type: Type.NUMBER, description: "Quantity purchased." },
           unitPrice: { type: Type.NUMBER, description: "Price per individual unit." },
           totalAmount: { type: Type.NUMBER, description: "The total cost for this line item (usually quantity * unit price)." }
@@ -35,7 +35,107 @@ const invoiceSchema = {
   required: ["documentType", "vendorName", "totalAmount", "lineItems", "currencySymbol"]
 };
 
-export const extractInvoiceData = async (file: File): Promise<InvoiceData> => {
+// Helper to clean garbage from numbers (e.g. "2953.2!" -> 2953.2)
+const cleanNumber = (val: any): number => {
+  if (typeof val === 'number') return val;
+  if (!val) return 0;
+  // Remove currency symbols, commas, exclamation marks, etc. Keep digits and dots.
+  const cleaned = String(val).replace(/[^0-9.-]/g, '');
+  return parseFloat(cleaned) || 0;
+};
+
+// Generate realistic mock data
+const generateMockInvoice = (): InvoiceData => {
+  const vendors = ['Acme Supply Co.', 'Global Logistics Ltd.', 'Apex Components', 'Northside Services', 'Quantum Materials'];
+  const categories = ['Raw Materials', 'Office Supplies', 'Freight', 'Maintenance', 'Professional Services'];
+  const currencies = ['$', '€', '£', '¥'];
+  
+  const vendor = vendors[Math.floor(Math.random() * vendors.length)];
+  const currency = currencies[Math.floor(Math.random() * currencies.length)];
+  const itemCount = Math.floor(Math.random() * 8) + 3;
+  
+  const lineItems: LineItem[] = [];
+  let total = 0;
+
+  for (let i = 0; i < itemCount; i++) {
+    const qty = Math.floor(Math.random() * 10) + 1;
+    const price = parseFloat((Math.random() * 500 + 10).toFixed(2));
+    const lineTotal = parseFloat((qty * price).toFixed(2));
+    
+    lineItems.push({
+      sku: `SKU-${Math.floor(Math.random() * 10000)}`,
+      description: `Sample Item Description ${i + 1} - ${vendor} Part`,
+      glCategory: categories[Math.floor(Math.random() * categories.length)],
+      quantity: qty,
+      unitPrice: price,
+      totalAmount: lineTotal
+    });
+    total += lineTotal;
+  }
+
+  return {
+    id: crypto.randomUUID(),
+    documentType: Math.random() > 0.8 ? 'PACKING SLIP' : 'INVOICE',
+    vendorName: vendor,
+    invoiceDate: new Date().toISOString().split('T')[0],
+    totalAmount: parseFloat(total.toFixed(2)),
+    currencySymbol: currency,
+    lineItems: lineItems,
+    isDemo: true,
+    language: 'Original',
+    confidenceScore: 'High',
+    validationFlags: { hasZeroPrices: false, lowItemCount: false, missingMetadata: false }
+  };
+};
+
+// Assess extraction quality and assign confidence score/flags
+const assessExtractionQuality = (data: InvoiceData): InvoiceData => {
+  const flags = {
+    hasZeroPrices: false,
+    lowItemCount: false,
+    missingMetadata: false
+  };
+
+  // Check 1: Zero Prices
+  const zeroPriceItems = data.lineItems.filter(i => i.unitPrice === 0 && i.totalAmount === 0);
+  if (zeroPriceItems.length > 0 && data.lineItems.length > 0) {
+    flags.hasZeroPrices = true;
+  }
+
+  // Check 2: Low Item Count (Heuristic for complex docs)
+  if (data.lineItems.length < 3) {
+    flags.lowItemCount = true;
+  }
+
+  // Check 3: Metadata Health
+  if (!data.vendorName || data.vendorName.toLowerCase() === 'unknown' || data.totalAmount === 0) {
+    flags.missingMetadata = true;
+  }
+
+  // Determine Confidence Score
+  let score: 'High' | 'Medium' | 'Low' = 'High';
+  
+  if (flags.missingMetadata) {
+    score = 'Low';
+  } else if (flags.hasZeroPrices || flags.lowItemCount) {
+    score = 'Medium';
+  }
+
+  return {
+    ...data,
+    confidenceScore: score,
+    validationFlags: flags
+  };
+};
+
+export const extractInvoiceData = async (file: File, isDemoMode: boolean = false): Promise<InvoiceData> => {
+  // DEMO MODE BYPASS
+  if (isDemoMode) {
+    console.log("Demo Mode Active: Generating mock data...");
+    await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate delay
+    return generateMockInvoice();
+  }
+
   try {
     const base64Data = await fileToGenerativePart(file);
 
@@ -50,38 +150,99 @@ export const extractInvoiceData = async (file: File): Promise<InvoiceData> => {
             },
           },
           {
-            text: `Analyze this supply chain document image.
+            text: `Analyze this supply chain document image to extract structured data.
 
-STRICT EXTRACTION RULES:
-1. Document Classification: Classify the document type strictly as 'INVOICE', 'PACKING SLIP', or 'BOL' (Bill of Lading). Look for keywords like 'Invoice', 'Bill of Lading', 'Packing List', 'Delivery Note'.
-2. Trust the Ink: Extract the Unit Price and Line Total EXACTLY as they appear visually on the document. Do NOT perform any math to calculate these fields. If the paper says 'Total: 2.19', extract '2.19', even if you think it should be higher based on multiplication.
-3. Column Awareness: Pay close attention to column alignment. On handwritten receipts, if a number is in the right-most column, it is likely the Line Total, not the Unit Price.
-4. Vendor Fallback: If a clear business logo or name is missing, use the document title (e.g., 'CASH SALE') as the Vendor Name.
+CORE OBJECTIVE: EXTRACT EVERY SINGLE LINE ITEM. 
+- If there are 50 items, extract 50 items. 
+- Do NOT stop early.
+- Be exhaustive.
 
-Extract the document type, vendor name, invoice date, total amount, and currency symbol.
-Extract all line items (SKU, description, quantity, price, and line total).
-For each line item, infer a logical 'GL Category' (General Ledger) based on the description (e.g., Office Supplies, Inventory, Software, Logistics).
-Ensure the output is strictly valid JSON matching the schema provided.`
+1. LINE ITEM EXTRACTION (ROW BY ROW):
+   - Scan the main table row by row.
+   - Ignore slight column misalignments; use context to identify the row.
+   - **SKU**: Look for codes. If missing, leave blank.
+   - **Description**: Capture the full text.
+   - **Unit Price**: Look for 'Price', 'Rate', 'Unit Cost'. If a column is blank but you see a Total, infer it.
+   - **Total**: Look for 'Amount', 'Ext Price'.
+
+2. NUMERIC DATA CLEANING:
+   - Remove currency symbols ($) and commas (,) from numbers.
+   - Return raw numbers (e.g. 1200.50).
+
+3. DOCUMENT METADATA:
+   - Classify Document Type (Invoice, Packing Slip, BOL).
+   - Extract Vendor Name and Invoice Date.
+   - Identify Currency Symbol ($ is default).
+
+4. OUTPUT FORMAT:
+   - Strictly adhere to the JSON schema.`
           },
         ],
       },
       config: {
         responseMimeType: "application/json",
         responseSchema: invoiceSchema,
-        temperature: 0.1, // Low temperature for factual extraction
+        temperature: 0.1,
+        maxOutputTokens: 8192, // Maximize token limit for long lists
       },
+    }).catch(e => {
+       // Catch and rethrow specific API errors
+       if (e.message?.includes('429') || e.status === 429 || e.message?.includes('Resource has been exhausted')) {
+         const error: any = new Error('Quota Exceeded');
+         error.code = 'QUOTA_EXCEEDED';
+         throw error;
+       }
+       throw e;
     });
 
     const text = response.text;
     if (!text) {
-      throw new Error("No data returned from Gemini.");
+      const error: any = new Error("No data returned from Gemini.");
+      error.code = 'READ_ERROR';
+      throw error;
     }
 
     const data = JSON.parse(text) as InvoiceData;
-    return data;
 
-  } catch (error) {
+    // POST-PROCESSING & SANITIZATION
+    const sanitizedLineItems = data.lineItems.map(item => {
+      let unitPrice = cleanNumber(item.unitPrice);
+      let totalAmount = cleanNumber(item.totalAmount);
+      let quantity = cleanNumber(item.quantity);
+
+      // Fallback: Calculate Unit Price if missing but Total is present
+      if ((unitPrice === 0) && quantity > 0 && totalAmount > 0) {
+        unitPrice = parseFloat((totalAmount / quantity).toFixed(2));
+      }
+
+      // Fallback: Calculate Total if missing
+      if (totalAmount === 0 && quantity > 0 && unitPrice > 0) {
+        totalAmount = parseFloat((quantity * unitPrice).toFixed(2));
+      }
+
+      return {
+        ...item,
+        quantity,
+        unitPrice,
+        totalAmount
+      };
+    });
+
+    const sanitizedData = {
+      ...data,
+      totalAmount: cleanNumber(data.totalAmount),
+      lineItems: sanitizedLineItems
+    };
+
+    // Quality Check
+    return assessExtractionQuality(sanitizedData);
+
+  } catch (error: any) {
     console.error("Gemini Extraction Error:", error);
+    // Standardize error throwing
+    if (!error.code) {
+        error.code = 'GENERIC';
+    }
     throw error;
   }
 };
@@ -108,7 +269,6 @@ export const translateLineItems = async (items: LineItem[], targetLanguage: stri
   if (items.length === 0) return items;
 
   try {
-    // Simplify payload to save tokens
     const payload = items.map((item, idx) => ({
       index: idx,
       description: item.description,
@@ -120,12 +280,8 @@ export const translateLineItems = async (items: LineItem[], targetLanguage: stri
       contents: {
         parts: [
           {
-            text: `Translate the 'description' and 'glCategory' fields in the following JSON to ${targetLanguage}. 
-            Return a JSON object with an 'items' array containing objects with 'index', 'translatedDescription', and 'translatedCategory'.
-            Ensure technical terms relevant to supply chain and accounting are translated accurately.
-            
-            Input JSON:
-            ${JSON.stringify(payload)}`
+            text: `Translate 'description' and 'glCategory' to ${targetLanguage}. Return JSON with 'items' array.
+            Input: ${JSON.stringify(payload)}`
           }
         ]
       },
@@ -139,11 +295,8 @@ export const translateLineItems = async (items: LineItem[], targetLanguage: stri
     if (!text) return items;
 
     const result = JSON.parse(text) as { items: { index: number, translatedDescription: string, translatedCategory: string }[] };
-    
-    // Create a map for easy lookup
     const translationMap = new Map(result.items.map(i => [i.index, i]));
 
-    // Merge translations back into original items
     return items.map((item, index) => {
       const translation = translationMap.get(index);
       if (translation) {
@@ -158,7 +311,7 @@ export const translateLineItems = async (items: LineItem[], targetLanguage: stri
 
   } catch (error) {
     console.error("Translation Error:", error);
-    return items; // Return original items on error
+    return items;
   }
 };
 
@@ -167,7 +320,6 @@ async function fileToGenerativePart(file: File): Promise<string> {
     const reader = new FileReader();
     reader.onloadend = () => {
       const base64String = reader.result as string;
-      // Remove data url prefix (e.g. "data:image/jpeg;base64,")
       const base64Data = base64String.split(',')[1];
       resolve(base64Data);
     };
