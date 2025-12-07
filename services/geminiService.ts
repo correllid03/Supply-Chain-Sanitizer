@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { InvoiceData, LineItem } from "../types";
 import { CURRENCY_RATES, getCurrencyCode } from '../utils/currency';
@@ -296,14 +295,8 @@ Output JSON.`
 };
 
 export const translateLineItems = async (items: LineItem[], targetLanguage: string): Promise<LineItem[]> => {
-  // ... (Existing translation logic can remain simple for now or be expanded similarly)
-  // For brevity, assuming the existing translation logic is sufficient or can be pasted here if needed.
-  // Returning items to avoid breaking compilation if you don't have the full code block handy.
-  // Ideally this should use the same GoogleGenAI instance.
-  
   if (items.length === 0) return items;
   try {
-     // Simplified translation call
      const prompt = `Translate 'description' and 'glCategory' to ${targetLanguage}. Return JSON array of objects with index, translatedDescription, translatedCategory. Input: ${JSON.stringify(items.map((item, i) => ({index: i, desc: item.description, cat: item.glCategory})))}`;
      
      const response = await ai.models.generateContent({
@@ -312,8 +305,19 @@ export const translateLineItems = async (items: LineItem[], targetLanguage: stri
         config: { responseMimeType: "application/json" }
      });
      const raw = JSON.parse(response.text);
-     // Basic mapping logic would go here...
-     return items; // Placeholder to ensure valid TS file
+     
+     const translationMap = raw.reduce((acc: any, curr: any) => {
+         acc[curr.index] = curr;
+         return acc;
+     }, {});
+
+     return items.map((item, index) => {
+         const translation = translationMap[index];
+         if (translation) {
+             return { ...item, description: translation.translatedDescription || item.description, glCategory: translation.translatedCategory || item.glCategory };
+         }
+         return item;
+     });
   } catch (e) {
       return items;
   }
