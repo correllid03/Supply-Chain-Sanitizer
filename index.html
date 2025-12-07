@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Supply Chain Invoice Sanitizer</title>
+    <title>E.S.T.E.R. Beta | v0.9.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -42,6 +42,26 @@
       }
       .dark ::-webkit-scrollbar-thumb:hover {
         background: #475569; 
+      }
+      
+      @media print {
+        header, aside, .action-bar, .no-print {
+          display: none !important;
+        }
+        main {
+          width: 100% !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          overflow: visible !important;
+        }
+        body {
+          background: white !important;
+          color: black !important;
+        }
+        .dark {
+            color: black !important;
+            background: white !important;
+        }
       }
     </style>
   <script type="importmap">

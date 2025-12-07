@@ -6,6 +6,9 @@ export interface LineItem {
   unitPrice: number;
   totalAmount: number;
   glCategory: string;
+  // AI Enhancements
+  glConfidence?: number; // 0-100
+  glReasoning?: string;
 }
 
 export interface InvoiceData {
@@ -17,6 +20,7 @@ export interface InvoiceData {
   currencySymbol: string;
   lineItems: LineItem[];
   language?: string; // Tracks the current language of the data (e.g., 'Original', 'English')
+  detectedLanguage?: string; // The language detected by AI during extraction
   originalLineItems?: LineItem[]; // Backup of the original extraction for reverting/re-translating
   processingTimeMs?: number; // Time taken to process this document
   isDemo?: boolean; // Flag for mock data
@@ -26,8 +30,14 @@ export interface InvoiceData {
     hasZeroPrices?: boolean;
     lowItemCount?: boolean;
     missingMetadata?: boolean;
+    unsupportedCurrency?: boolean; // New flag
+    unsupportedLanguage?: boolean; // New flag
   };
   confidenceScore?: 'High' | 'Medium' | 'Low';
+  
+  // Sensitive Data
+  hasSensitiveData?: boolean;
+  sensitiveDataTypes?: string[];
 }
 
 export interface ProcessingState {

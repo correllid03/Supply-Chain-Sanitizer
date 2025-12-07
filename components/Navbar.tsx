@@ -1,6 +1,6 @@
 
-import React from 'react';
-import { ShieldCheck, Sun, Moon, Coins, Languages, Plus, History, ChevronRight, Home, Loader2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Hexagon, Sun, Moon, Coins, Languages, Plus, History, ChevronRight, Home, Loader2 } from 'lucide-react';
 import { TranslationDictionary } from '../utils/translations';
 
 interface NavbarProps {
@@ -38,6 +38,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLanguageChange,
   isTranslating
 }) => {
+  const [showDecoder, setShowDecoder] = useState(false);
+  
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -50,16 +52,38 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="flex items-center space-x-4 min-w-0">
           <div 
             onClick={onNavigateHome}
-            className="flex items-center space-x-3 cursor-pointer group shrink-0"
-            title={t.home}
+            onMouseEnter={() => setShowDecoder(true)}
+            onMouseLeave={() => setShowDecoder(false)}
+            className="flex items-center space-x-3 cursor-pointer group shrink-0 relative"
           >
             <div className="p-2 bg-gradient-to-br from-indigo-600 to-blue-600 rounded-lg shadow-lg shadow-indigo-500/20 ring-1 ring-black/5 dark:ring-white/10 group-hover:scale-105 transition-transform duration-300">
-              <ShieldCheck className="w-5 h-5 text-white" />
+              <Hexagon className="w-5 h-5 text-white" />
             </div>
             <div className="hidden md:block">
-              <h1 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white leading-none">
-                {t.appTitle} <span className="text-indigo-600 dark:text-indigo-400">{t.sanitizer}</span>
-              </h1>
+              <div className="flex items-center gap-2">
+                  <h1 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white leading-none">
+                    {t.appTitle} <span className="text-indigo-600 dark:text-indigo-400">{t.sanitizer}</span>
+                  </h1>
+                  <span className="px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-[10px] font-mono font-bold text-indigo-500 dark:text-indigo-400 border border-indigo-500/20">
+                    v0.9 PUBLIC BETA
+                  </span>
+              </div>
+            </div>
+
+            {/* Acronym Decoder Tooltip */}
+            <div className={`absolute top-full left-0 mt-4 w-64 bg-slate-900 dark:bg-slate-950 border border-cyan-500/30 rounded-xl p-4 shadow-2xl z-[100] transition-all duration-300 transform origin-top-left ${showDecoder ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'}`}>
+               <div className="absolute -top-1.5 left-5 w-3 h-3 bg-slate-900 border-t border-l border-cyan-500/30 rotate-45"></div>
+               <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest mb-3 border-b border-cyan-500/20 pb-2">System Architecture</h3>
+               <div className="space-y-2 font-mono text-[10px] text-slate-300">
+                  <div className="flex"><span className="text-indigo-400 font-bold w-4">E</span><span>xtraction</span></div>
+                  <div className="flex"><span className="text-indigo-400 font-bold w-4">S</span><span>ystem (for)</span></div>
+                  <div className="flex"><span className="text-indigo-400 font-bold w-4">T</span><span>ransactional</span></div>
+                  <div className="flex"><span className="text-indigo-400 font-bold w-4">E</span><span>ntity</span></div>
+                  <div className="flex"><span className="text-indigo-400 font-bold w-4">R</span><span>econciliation</span></div>
+               </div>
+               <div className="mt-3 pt-2 border-t border-slate-800 text-[9px] text-slate-500">
+                  AI-Powered Financial Analysis Kernel v0.9
+               </div>
             </div>
           </div>
 
@@ -118,7 +142,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
 
           {/* Currency Dropdown */}
-          <div className="hidden lg:flex items-center space-x-2 bg-white dark:bg-slate-800 rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm group h-9">
+          <div className="hidden lg:flex items-center space-x-2 bg-white dark:bg-slate-800 rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm group h-10">
               <Coins className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors shrink-0" />
               <div className="flex flex-col justify-center">
                 <label htmlFor="currency-select" className="text-[9px] text-slate-500 dark:text-slate-400 font-bold uppercase leading-none mb-0.5">
@@ -146,7 +170,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           {/* Translation Dropdown */}
-          <div className="hidden md:flex items-center space-x-2 bg-white dark:bg-slate-800 rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm group h-9">
+          <div className="hidden md:flex items-center space-x-2 bg-white dark:bg-slate-800 rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm group h-10">
             {isTranslating ? (
               <Loader2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400 animate-spin shrink-0" />
             ) : (
@@ -196,6 +220,17 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4 group-hover:text-black" />}
           </button>
+
+          {/* System Status Indicator */}
+          <div className="hidden xl:flex flex-col items-end justify-center pl-2 border-l border-slate-200 dark:border-slate-700 h-8 ml-1">
+             <div className="flex items-center space-x-1.5">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span className="text-[9px] font-mono text-slate-500 dark:text-slate-400 uppercase tracking-widest opacity-80">System Online</span>
+             </div>
+          </div>
 
         </div>
       </div>

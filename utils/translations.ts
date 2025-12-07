@@ -33,6 +33,13 @@ export interface TranslationDictionary {
   topCategories: string; // New
   languages: string; // New
   seconds: string; // New
+  sessionActive: string; // New
+  sessionPrivacyInfo: string; // New
+  spendingBreakdown: string; // New
+  vendorFrequency: string; // New
+  currencyDist: string; // New
+  recentActivity: string; // New
+  other: string; // New
 
   // Editor
   documentType: string;
@@ -59,6 +66,8 @@ export interface TranslationDictionary {
   highRisk: string;
   recalculate: string;
   fixAll: string;
+  sensitiveDetected: string;
+  complianceWarning: string;
   
   // CSV Headers
   csvDocumentType: string;
@@ -85,6 +94,10 @@ export interface TranslationDictionary {
   verifyPrices: string;
   lowItemCount: string;
   tryAgain: string;
+  clearData: string;
+  clearDataConfirmTitle: string;
+  clearDataConfirmMessage: string;
+  dataClearedSuccess: string;
 
   // Examples
   tryExample: string;
@@ -106,19 +119,24 @@ export interface TranslationDictionary {
   processingBatch: "Processing {current} of {total}: {filename}..." | string;
   batchComplete: string;
   exportCombined: string;
+
+  // Actions
+  copied: string;
+  copyToClipboard: string;
+  printPdf: string;
 }
 
 export const translations: Record<string, TranslationDictionary> = {
   English: {
-    appTitle: "Supply Chain",
-    sanitizer: "Sanitizer",
+    appTitle: "E.S.T.E.R.",
+    sanitizer: "Beta",
     toggleTheme: "Toggle Theme",
     translateTo: "Translate To",
     targetCurrency: "Target Currency",
     original: "Original",
     heroTitle: "Digitize Your",
     financialData: "Financial Data",
-    heroSubtitle: "Transform unstructured invoices and packing slips into clean, ERP-ready data using our advanced AI models.",
+    heroSubtitle: "Extraction System for Transactional Entity Reconciliation. Transforming unstructured chaos into audit-ready financial clarity.",
     dropZoneMain: "Drop invoices here",
     dropZoneSub: "Batch processing supported (Max 5)",
     uploadError: "Failed to extract data. Please try a clearer image.",
@@ -130,7 +148,7 @@ export const translations: Record<string, TranslationDictionary> = {
     translating: "Translating...",
     exportCsv: "Export CSV",
     sessionTrail: "Session Audit Trail",
-    sessionStats: "Session Stats",
+    sessionStats: "Session Analytics",
     noDocs: "No documents processed yet.",
     riskDetected: "Risk Detected",
     clean: "Clean",
@@ -141,6 +159,13 @@ export const translations: Record<string, TranslationDictionary> = {
     topCategories: "Top GL Categories",
     languages: "Languages Detected",
     seconds: "s",
+    sessionActive: "Session active: {minutes}m",
+    sessionPrivacyInfo: "All data is stored in your browser session only. Data will be cleared when you close this tab or browser.",
+    spendingBreakdown: "Spending by GL Category",
+    vendorFrequency: "Top Vendors",
+    currencyDist: "Currency Distribution",
+    recentActivity: "Session Activity",
+    other: "Other",
     documentType: "DOCUMENT TYPE",
     vendorName: "Vendor Name",
     invoiceDate: "Invoice Date",
@@ -165,6 +190,8 @@ export const translations: Record<string, TranslationDictionary> = {
     highRisk: "High Risk",
     recalculate: "Fix",
     fixAll: "Recalculate All",
+    sensitiveDetected: "Sensitive Information Detected",
+    complianceWarning: "Handle with care and ensure compliance with data protection regulations.",
     csvDocumentType: "Document Type",
     csvVendor: "Vendor",
     csvDate: "Date",
@@ -189,6 +216,10 @@ export const translations: Record<string, TranslationDictionary> = {
     verifyPrices: "Verify Prices",
     lowItemCount: "Low Item Count",
     tryAgain: "Try Again",
+    clearData: "Clear All Session Data",
+    clearDataConfirmTitle: "Clear All Session Data?",
+    clearDataConfirmMessage: "This will permanently delete all processed invoices from this session. This action cannot be undone.",
+    dataClearedSuccess: "All data cleared. Your session is now empty.",
 
     // Examples
     tryExample: "Try an Example:",
@@ -209,11 +240,16 @@ export const translations: Record<string, TranslationDictionary> = {
     sanitizeBatch: "SANITIZE {count} DOCUMENTS",
     processingBatch: "Processing {current} of {total}: {filename}...",
     batchComplete: "Batch processing complete!",
-    exportCombined: "Export Combined CSV"
+    exportCombined: "Export Combined CSV",
+    
+    // Actions
+    copied: "Copied to clipboard!",
+    copyToClipboard: "Copy to Clipboard",
+    printPdf: "Print / Save as PDF"
   },
   Spanish: {
-    appTitle: "Cadena de Suministro",
-    sanitizer: "Depurador",
+    appTitle: "E.S.T.E.R.",
+    sanitizer: "Beta",
     toggleTheme: "Cambiar Tema",
     translateTo: "Traducir A",
     targetCurrency: "Moneda de Destino",
@@ -232,7 +268,7 @@ export const translations: Record<string, TranslationDictionary> = {
     translating: "Traduciendo...",
     exportCsv: "Exportar CSV",
     sessionTrail: "Historial de Sesión",
-    sessionStats: "Estadísticas",
+    sessionStats: "Analítica",
     noDocs: "Ningún documento procesado aún.",
     riskDetected: "Riesgo Detectado",
     clean: "Limpio",
@@ -243,6 +279,13 @@ export const translations: Record<string, TranslationDictionary> = {
     topCategories: "Categorías Principales",
     languages: "Idiomas Detectados",
     seconds: "s",
+    sessionActive: "Sesión activa: {minutes}m",
+    sessionPrivacyInfo: "Todos los datos se almacenan solo en su navegador. Se borrarán al cerrar esta pestaña.",
+    spendingBreakdown: "Gasto por Categoría",
+    vendorFrequency: "Principales Vendedores",
+    currencyDist: "Distribución de Moneda",
+    recentActivity: "Actividad Reciente",
+    other: "Otro",
     documentType: "TIPO DE DOCUMENTO",
     vendorName: "Nombre del Vendedor",
     invoiceDate: "Fecha de Factura",
@@ -267,6 +310,8 @@ export const translations: Record<string, TranslationDictionary> = {
     highRisk: "Alto Riesgo",
     recalculate: "Arreglar",
     fixAll: "Recalcular Todo",
+    sensitiveDetected: "Información Confidencial Detectada",
+    complianceWarning: "Manejar con cuidado y asegurar el cumplimiento de las regulaciones de protección de datos.",
     csvDocumentType: "Tipo de Documento",
     csvVendor: "Vendedor",
     csvDate: "Fecha",
@@ -291,6 +336,10 @@ export const translations: Record<string, TranslationDictionary> = {
     verifyPrices: "Verificar Precios",
     lowItemCount: "Pocos Artículos",
     tryAgain: "Intentar de Nuevo",
+    clearData: "Borrar Todos los Datos",
+    clearDataConfirmTitle: "¿Borrar Todos los Datos?",
+    clearDataConfirmMessage: "Esto eliminará permanentemente todas las facturas procesadas de esta sesión. Esta acción no se puede deshacer.",
+    dataClearedSuccess: "Todos los datos borrados. Su sesión ahora está vacía.",
 
     // Examples
     tryExample: "Prueba un Ejemplo:",
@@ -311,11 +360,16 @@ export const translations: Record<string, TranslationDictionary> = {
     sanitizeBatch: "DEPURAR {count} DOCUMENTOS",
     processingBatch: "Procesando {current} de {total}: {filename}...",
     batchComplete: "¡Procesamiento por lotes completo!",
-    exportCombined: "Exportar CSV Combinado"
+    exportCombined: "Exportar CSV Combinado",
+
+    // Actions
+    copied: "¡Copiado al portapapeles!",
+    copyToClipboard: "Copiar al Portapapeles",
+    printPdf: "Imprimir / Guardar como PDF"
   },
   French: {
-    appTitle: "Supply Chain",
-    sanitizer: "Assainisseur",
+    appTitle: "E.S.T.E.R.",
+    sanitizer: "Beta",
     toggleTheme: "Changer de Thème",
     translateTo: "Traduire Vers",
     targetCurrency: "Devise Cible",
@@ -334,7 +388,7 @@ export const translations: Record<string, TranslationDictionary> = {
     translating: "Traduction...",
     exportCsv: "Exporter CSV",
     sessionTrail: "Piste d'Audit de Session",
-    sessionStats: "Statistiques",
+    sessionStats: "Analytique",
     noDocs: "Aucun document traité pour l'instant.",
     riskDetected: "Risque Détecté",
     clean: "Propre",
@@ -345,6 +399,13 @@ export const translations: Record<string, TranslationDictionary> = {
     topCategories: "Catégories Principales",
     languages: "Langues Détectées",
     seconds: "s",
+    sessionActive: "Session active: {minutes}m",
+    sessionPrivacyInfo: "Toutes les données sont stockées dans la session de votre navigateur. Elles seront effacées à la fermeture.",
+    spendingBreakdown: "Dépenses par Catégorie",
+    vendorFrequency: "Meilleurs Vendeurs",
+    currencyDist: "Distribution des Devises",
+    recentActivity: "Activité Récente",
+    other: "Autre",
     documentType: "TYPE DE DOCUMENT",
     vendorName: "Nom du Vendeur",
     invoiceDate: "Date de Facture",
@@ -369,6 +430,8 @@ export const translations: Record<string, TranslationDictionary> = {
     highRisk: "Haut Risque",
     recalculate: "Corriger",
     fixAll: "Recalculer Tout",
+    sensitiveDetected: "Informations Sensibles Détectées",
+    complianceWarning: "Manipuler avec soin et assurer la conformité avec les réglementations de protection des données.",
     csvDocumentType: "Type de Document",
     csvVendor: "Vendeur",
     csvDate: "Date",
@@ -393,6 +456,10 @@ export const translations: Record<string, TranslationDictionary> = {
     verifyPrices: "Vérifier Prix",
     lowItemCount: "Peu d'Articles",
     tryAgain: "Réessayer",
+    clearData: "Effacer Toutes les Données",
+    clearDataConfirmTitle: "Effacer Toutes les Données ?",
+    clearDataConfirmMessage: "Cela supprimera définitivement toutes les factures traitées de cette session. Cette action est irréversible.",
+    dataClearedSuccess: "Toutes les données effacées. Votre session est vide.",
 
     // Examples
     tryExample: "Essayer un Exemple :",
@@ -413,11 +480,16 @@ export const translations: Record<string, TranslationDictionary> = {
     sanitizeBatch: "ASSAINIR {count} DOCUMENTOS",
     processingBatch: "Traitement de {current} sur {total}: {filename}...",
     batchComplete: "Traitement par lots terminé !",
-    exportCombined: "Exporter CSV Combiné"
+    exportCombined: "Exporter CSV Combiné",
+
+    // Actions
+    copied: "Copié dans le presse-papiers !",
+    copyToClipboard: "Copier dans le Presse-papiers",
+    printPdf: "Imprimer / Enregistrer en PDF"
   },
   German: {
-    appTitle: "Lieferkette",
-    sanitizer: "Bereiniger",
+    appTitle: "E.S.T.E.R.",
+    sanitizer: "Beta",
     toggleTheme: "Thema Umschalten",
     translateTo: "Übersetzen Nach",
     targetCurrency: "Zielwährung",
@@ -436,7 +508,7 @@ export const translations: Record<string, TranslationDictionary> = {
     translating: "Übersetzen...",
     exportCsv: "CSV Exportieren",
     sessionTrail: "Sitzungs-Audit-Trail",
-    sessionStats: "Statistiken",
+    sessionStats: "Analytik",
     noDocs: "Noch keine Dokumente verarbeitet.",
     riskDetected: "Risiko Erkannt",
     clean: "Sauber",
@@ -447,6 +519,13 @@ export const translations: Record<string, TranslationDictionary> = {
     topCategories: "Top Kategorien",
     languages: "Sprachen",
     seconds: "s",
+    sessionActive: "Sitzung aktiv: {minutes}m",
+    sessionPrivacyInfo: "Alle Daten werden nur in Ihrer Browsersitzung gespeichert. Sie werden beim Schließen gelöscht.",
+    spendingBreakdown: "Ausgaben nach Kategorie",
+    vendorFrequency: "Top Lieferanten",
+    currencyDist: "Währungsverteilung",
+    recentActivity: "Letzte Aktivitäten",
+    other: "Sonstige",
     documentType: "DOKUMENTENTYP",
     vendorName: "Lieferantenname",
     invoiceDate: "Rechnungsdatum",
@@ -471,6 +550,8 @@ export const translations: Record<string, TranslationDictionary> = {
     highRisk: "Hohes Risiko",
     recalculate: "Korrigieren",
     fixAll: "Alles Neuberechnen",
+    sensitiveDetected: "Sensible Daten Erkannt",
+    complianceWarning: "Vorsichtig behandeln und Datenschutzbestimmungen einhalten.",
     csvDocumentType: "Dokumententyp",
     csvVendor: "Lieferant",
     csvDate: "Datum",
@@ -495,6 +576,10 @@ export const translations: Record<string, TranslationDictionary> = {
     verifyPrices: "Preise Prüfen",
     lowItemCount: "Wenige Artikel",
     tryAgain: "Erneut Versuchen",
+    clearData: "Alle Sitzungsdaten Löschen",
+    clearDataConfirmTitle: "Alle Daten löschen?",
+    clearDataConfirmMessage: "Dies löscht dauerhaft alle verarbeiteten Rechnungen dieser Sitzung. Diese Aktion kann nicht rückgängig gemacht werden.",
+    dataClearedSuccess: "Alle Daten gelöscht. Ihre Sitzung ist leer.",
 
     // Examples
     tryExample: "Beispiel Testen:",
@@ -515,11 +600,16 @@ export const translations: Record<string, TranslationDictionary> = {
     sanitizeBatch: "{count} DOKUMENTE BEREINIGEN",
     processingBatch: "Verarbeite {current} von {total}: {filename}...",
     batchComplete: "Stapelverarbeitung abgeschlossen!",
-    exportCombined: "Kombinierte CSV Exportieren"
+    exportCombined: "Kombinierte CSV Exportieren",
+
+    // Actions
+    copied: "In die Zwischenablage kopiert!",
+    copyToClipboard: "In Zwischenablage kopieren",
+    printPdf: "Drucken / Als PDF speichern"
   },
   Chinese: {
-    appTitle: "供应链",
-    sanitizer: "清洗器",
+    appTitle: "E.S.T.E.R.",
+    sanitizer: "Beta",
     toggleTheme: "切换主题",
     translateTo: "翻译至",
     targetCurrency: "目标货币",
@@ -538,7 +628,7 @@ export const translations: Record<string, TranslationDictionary> = {
     translating: "翻译中...",
     exportCsv: "导出 CSV",
     sessionTrail: "会话审计跟踪",
-    sessionStats: "统计",
+    sessionStats: "统计分析",
     noDocs: "尚未处理任何文档。",
     riskDetected: "检测到风险",
     clean: "正常",
@@ -549,6 +639,13 @@ export const translations: Record<string, TranslationDictionary> = {
     topCategories: "热门类别",
     languages: "检测到的语言",
     seconds: "秒",
+    sessionActive: "会话活动: {minutes}分",
+    sessionPrivacyInfo: "所有数据仅存储在您的浏览器会话中。关闭标签页时将清除数据。",
+    spendingBreakdown: "按类别支出",
+    vendorFrequency: "热门供应商",
+    currencyDist: "货币分布",
+    recentActivity: "最近活动",
+    other: "其他",
     documentType: "文档类型",
     vendorName: "供应商名称",
     invoiceDate: "发票日期",
@@ -573,6 +670,8 @@ export const translations: Record<string, TranslationDictionary> = {
     highRisk: "高风险",
     recalculate: "修复",
     fixAll: "重新计算全部",
+    sensitiveDetected: "检测到敏感信息",
+    complianceWarning: "请小心处理并确保遵守数据保护法规。",
     csvDocumentType: "文档类型",
     csvVendor: "供应商",
     csvDate: "日期",
@@ -597,6 +696,10 @@ export const translations: Record<string, TranslationDictionary> = {
     verifyPrices: "验证价格",
     lowItemCount: "项目过少",
     tryAgain: "重试",
+    clearData: "清除所有会话数据",
+    clearDataConfirmTitle: "清除所有数据？",
+    clearDataConfirmMessage: "这将永久删除此会话中所有已处理的发票。此操作无法撤消。",
+    dataClearedSuccess: "所有数据已清除。您的会话现在为空。",
 
     // Examples
     tryExample: "尝试示例：",
@@ -617,11 +720,16 @@ export const translations: Record<string, TranslationDictionary> = {
     sanitizeBatch: "清洗 {count} 个文档",
     processingBatch: "正在处理 {current} / {total}: {filename}...",
     batchComplete: "批量处理完成！",
-    exportCombined: "导出组合 CSV"
+    exportCombined: "导出组合 CSV",
+
+    // Actions
+    copied: "已复制到剪貼板！",
+    copyToClipboard: "复制到剪贴板",
+    printPdf: "打印 / 另存为 PDF"
   },
   Japanese: {
-    appTitle: "サプライチェーン",
-    sanitizer: "サニタイザー",
+    appTitle: "E.S.T.E.R.",
+    sanitizer: "Beta",
     toggleTheme: "テーマ切り替え",
     translateTo: "翻訳先",
     targetCurrency: "目標通貨",
@@ -640,7 +748,7 @@ export const translations: Record<string, TranslationDictionary> = {
     translating: "翻訳中...",
     exportCsv: "CSVをエクスポート",
     sessionTrail: "セッション監査証跡",
-    sessionStats: "統計",
+    sessionStats: "分析",
     noDocs: "処理されたドキュメントはありません。",
     riskDetected: "リスク検出",
     clean: "クリーン",
@@ -651,6 +759,13 @@ export const translations: Record<string, TranslationDictionary> = {
     topCategories: "トップカテゴリ",
     languages: "検出言語",
     seconds: "秒",
+    sessionActive: "セッション有効: {minutes}分",
+    sessionPrivacyInfo: "すべてのデータはブラウザのセッションにのみ保存されます。このタブを閉じるとデータは消去されます。",
+    spendingBreakdown: "カテゴリ別支出",
+    vendorFrequency: "トップベンダー",
+    currencyDist: "通貨分布",
+    recentActivity: "最近のアクティビティ",
+    other: "その他",
     documentType: "ドキュメントタイプ",
     vendorName: "仕入先名",
     invoiceDate: "請求書日付",
@@ -675,6 +790,8 @@ export const translations: Record<string, TranslationDictionary> = {
     highRisk: "高リスク",
     recalculate: "修正",
     fixAll: "すべて再計算",
+    sensitiveDetected: "機密情報が検出されました",
+    complianceWarning: "慎重に取り扱い、データ保護規制への準拠を確認してください。",
     csvDocumentType: "ドキュメントタイプ",
     csvVendor: "仕入先",
     csvDate: "日付",
@@ -699,6 +816,10 @@ export const translations: Record<string, TranslationDictionary> = {
     verifyPrices: "価格確認",
     lowItemCount: "項目不足",
     tryAgain: "再試行",
+    clearData: "すべてのセッションデータを消去",
+    clearDataConfirmTitle: "すべてのデータを消去しますか？",
+    clearDataConfirmMessage: "これにより、このセッションで処理されたすべての請求書が完全に削除されます。この操作は元に戻せません。",
+    dataClearedSuccess: "すべてのデータが消去されました。セッションは空になりました。",
 
     // Examples
     tryExample: "例を試す：",
@@ -719,11 +840,16 @@ export const translations: Record<string, TranslationDictionary> = {
     sanitizeBatch: "{count} 件のドキュメントをサニタイズ",
     processingBatch: "{current} / {total} を処理中: {filename}...",
     batchComplete: "バッチ処理完了！",
-    exportCombined: "結合CSVをエクスポート"
+    exportCombined: "結合CSVをエクスポート",
+
+    // Actions
+    copied: "クリップボードにコピーしました！",
+    copyToClipboard: "クリップボードにコピー",
+    printPdf: "印刷 / PDFとして保存"
   },
   Portuguese: {
-    appTitle: "Cadeia de Suprimentos",
-    sanitizer: "Higienizador",
+    appTitle: "E.S.T.E.R.",
+    sanitizer: "Beta",
     toggleTheme: "Alternar Tema",
     translateTo: "Traduzir Para",
     targetCurrency: "Moeda Alvo",
@@ -742,7 +868,7 @@ export const translations: Record<string, TranslationDictionary> = {
     translating: "Traduzindo...",
     exportCsv: "Exportar CSV",
     sessionTrail: "Trilha de Auditoria",
-    sessionStats: "Estatísticas",
+    sessionStats: "Análise",
     noDocs: "Nenhum documento processado.",
     riskDetected: "Risco Detectado",
     clean: "Limpo",
@@ -753,6 +879,13 @@ export const translations: Record<string, TranslationDictionary> = {
     topCategories: "Categorias Principais",
     languages: "Idiomas Detectados",
     seconds: "s",
+    sessionActive: "Sessão ativa: {minutes}m",
+    sessionPrivacyInfo: "Todos os dados são armazenados apenas na sessão do navegador. Serão limpos ao fechar.",
+    spendingBreakdown: "Gastos por Categoria",
+    vendorFrequency: "Principais Fornecedores",
+    currencyDist: "Distribuição de Moeda",
+    recentActivity: "Atividade Recente",
+    other: "Outros",
     documentType: "TIPO DE DOCUMENTO",
     vendorName: "Fornecedor",
     invoiceDate: "Data da Fatura",
@@ -777,6 +910,8 @@ export const translations: Record<string, TranslationDictionary> = {
     highRisk: "Alto Risco",
     recalculate: "Corrigir",
     fixAll: "Recalcular Tudo",
+    sensitiveDetected: "Informações Confidenciais Detectadas",
+    complianceWarning: "Manuseie com cuidado e garanta a conformidade com os regulamentos de proteção de dados.",
     csvDocumentType: "Tipo de Documento",
     csvVendor: "Fornecedor",
     csvDate: "Data",
@@ -801,6 +936,10 @@ export const translations: Record<string, TranslationDictionary> = {
     verifyPrices: "Verificar Preços",
     lowItemCount: "Poucos Itens",
     tryAgain: "Tentar Novamente",
+    clearData: "Limpar Todos os Dados",
+    clearDataConfirmTitle: "Limpar Todos os Dados?",
+    clearDataConfirmMessage: "Isso excluirá permanentemente todas as faturas processadas desta sessão. Esta ação não pode ser desfeita.",
+    dataClearedSuccess: "Todos os dados limpos. Sua sessão agora está vazia.",
 
     // Examples
     tryExample: "Tentar Exemplo:",
@@ -821,11 +960,16 @@ export const translations: Record<string, TranslationDictionary> = {
     sanitizeBatch: "HIGIENIZAR {count} DOCUMENTOS",
     processingBatch: "Processando {current} de {total}: {filename}...",
     batchComplete: "Lote completo!",
-    exportCombined: "Exportar CSV Combinado"
+    exportCombined: "Exportar CSV Combinado",
+
+    // Actions
+    copied: "Copiado para a área de transferência!",
+    copyToClipboard: "Copiar para Área de Transferência",
+    printPdf: "Imprimir / Salvar como PDF"
   },
   Hindi: {
-    appTitle: "सप्लाई चेन",
-    sanitizer: "सैनिटाइज़र",
+    appTitle: "E.S.T.E.R.",
+    sanitizer: "Beta",
     toggleTheme: "थीम बदलें",
     translateTo: "अनुवाद करें",
     targetCurrency: "लक्ष्य मुद्रा",
@@ -844,7 +988,7 @@ export const translations: Record<string, TranslationDictionary> = {
     translating: "अनुवाद हो रहा है...",
     exportCsv: "CSV निर्यात करें",
     sessionTrail: "सत्र ऑडिट ट्रेल",
-    sessionStats: "आंकड़े",
+    sessionStats: "विश्लेषण",
     noDocs: "अभी तक कोई दस्तावेज़ संसाधित नहीं किया गया।",
     riskDetected: "जोखिम का पता चला",
     clean: "साफ",
@@ -855,6 +999,13 @@ export const translations: Record<string, TranslationDictionary> = {
     topCategories: "शीर्ष श्रेणियां",
     languages: "भाषाएँ",
     seconds: "सेकंड",
+    sessionActive: "सत्र सक्रिय: {minutes} मिनट",
+    sessionPrivacyInfo: "सभी डेटा केवल आपके ब्राउज़र सत्र में संग्रहीत हैं। बंद करने पर यह साफ़ हो जाएगा।",
+    spendingBreakdown: "श्रेणी द्वारा खर्च",
+    vendorFrequency: "शीर्ष विक्रेता",
+    currencyDist: "मुद्रा वितरण",
+    recentActivity: "हाल की गतिविधि",
+    other: "अन्य",
     documentType: "दस्तावेज़ प्रकार",
     vendorName: "विक्रेता का नाम",
     invoiceDate: "चालान तिथि",
@@ -879,6 +1030,8 @@ export const translations: Record<string, TranslationDictionary> = {
     highRisk: "उच्च जोखिम",
     recalculate: "ठीक करें",
     fixAll: "सभी पुनर्गणना करें",
+    sensitiveDetected: "संवेदनशील जानकारी का पता चला",
+    complianceWarning: "सावधानी से संभालें और डेटा सुरक्षा नियमों का अनुपालन सुनिश्चित करें।",
     csvDocumentType: "दस्तावेज़ प्रकार",
     csvVendor: "विक्रेता",
     csvDate: "तारीख",
@@ -903,6 +1056,10 @@ export const translations: Record<string, TranslationDictionary> = {
     verifyPrices: "कीमतों की जाँच करें",
     lowItemCount: "कम आइटम",
     tryAgain: "पुनः प्रयास करें",
+    clearData: "सभी डेटा साफ़ करें",
+    clearDataConfirmTitle: "सभी डेटा साफ़ करें?",
+    clearDataConfirmMessage: "यह इस सत्र से सभी संसाधित चालानों को स्थायी रूप से हटा देगा। इसे पूर्ववत नहीं किया जा सकता।",
+    dataClearedSuccess: "सभी डेटा साफ़ कर दिया गया। आपका सत्र अब खाली है।",
 
     // Examples
     tryExample: "उदाहरण आज़माएं:",
@@ -923,11 +1080,16 @@ export const translations: Record<string, TranslationDictionary> = {
     sanitizeBatch: "{count} दस्तावेज़ साफ़ करें",
     processingBatch: "{total} में से {current} प्रसंस्करण: {filename}...",
     batchComplete: "बैच प्रसंस्करण पूर्ण!",
-    exportCombined: "संयुक्त CSV निर्यात करें"
+    exportCombined: "संयुक्त CSV निर्यात करें",
+
+    // Actions
+    copied: "क्लिपबोर्ड पर कॉपी किया गया!",
+    copyToClipboard: "क्लिपबोर्ड पर कॉपी करें",
+    printPdf: "प्रिंट / पीडीएफ के रूप में सहेजें"
   },
   Arabic: {
-    appTitle: "سلسلة التوريد",
-    sanitizer: "معقم البيانات",
+    appTitle: "E.S.T.E.R.",
+    sanitizer: "Beta",
     toggleTheme: "تبديل المظهر",
     translateTo: "ترجمة إلى",
     targetCurrency: "العملة المستهدفة",
@@ -946,7 +1108,7 @@ export const translations: Record<string, TranslationDictionary> = {
     translating: "جاري الترجمة...",
     exportCsv: "تصدير CSV",
     sessionTrail: "سجل تدقيق الجلسة",
-    sessionStats: "إحصائيات",
+    sessionStats: "تحليلات",
     noDocs: "لم تتم معالجة أي مستندات بعد.",
     riskDetected: "تم اكتشاف خطر",
     clean: "نظيف",
@@ -957,6 +1119,13 @@ export const translations: Record<string, TranslationDictionary> = {
     topCategories: "أهم الفئات",
     languages: "اللغات",
     seconds: "ثانية",
+    sessionActive: "الجلسة نشطة: {minutes} دقيقة",
+    sessionPrivacyInfo: "يتم تخزين جميع البيانات في جلسة المتصفح فقط. سيتم مسحها عند الإغلاق.",
+    spendingBreakdown: "الإنفاق حسب الفئة",
+    vendorFrequency: "كبار البائعين",
+    currencyDist: "توزيع العملات",
+    recentActivity: "النشاط الأخير",
+    other: "آخر",
     documentType: "نوع المستند",
     vendorName: "اسم البائع",
     invoiceDate: "تاريخ الفاتورة",
@@ -981,6 +1150,8 @@ export const translations: Record<string, TranslationDictionary> = {
     highRisk: "خطر مرتفع",
     recalculate: "إصلاح",
     fixAll: "إعادة حساب الكل",
+    sensitiveDetected: "تم اكتشاف معلومات حساسة",
+    complianceWarning: "تعامل بحذر وتأكد من الامتثال للوائح حماية البيانات.",
     csvDocumentType: "نوع المستند",
     csvVendor: "البائع",
     csvDate: "التاريخ",
@@ -1005,6 +1176,10 @@ export const translations: Record<string, TranslationDictionary> = {
     verifyPrices: "تحقق من الأسعار",
     lowItemCount: "عناصر قليلة",
     tryAgain: "حاول مرة أخرى",
+    clearData: "مسح جميع البيانات",
+    clearDataConfirmTitle: "مسح جميع البيانات؟",
+    clearDataConfirmMessage: "سيؤدي هذا إلى حذف جميع الفواتير المعالجة نهائيًا من هذه الجلسة. لا يمكن التراجع عن هذا الإجراء.",
+    dataClearedSuccess: "تم مسح جميع البيانات. جلستك الآن فارغة.",
 
     // Examples
     tryExample: "جرب مثالاً:",
@@ -1025,11 +1200,16 @@ export const translations: Record<string, TranslationDictionary> = {
     sanitizeBatch: "تعقيم {count} مستندات",
     processingBatch: "معالجة {current} من {total}: {filename}...",
     batchComplete: "اكتملت معالجة الدفعة!",
-    exportCombined: "تصدير CSV مدمج"
+    exportCombined: "تصدير CSV مدمج",
+
+    // Actions
+    copied: "تم النسخ إلى الحافظة!",
+    copyToClipboard: "نسخ إلى الحافظة",
+    printPdf: "طباعة / حفظ كملف PDF"
   },
   Korean: {
-    appTitle: "공급망",
-    sanitizer: "세니타이저",
+    appTitle: "E.S.T.E.R.",
+    sanitizer: "Beta",
     toggleTheme: "테마 변경",
     translateTo: "번역",
     targetCurrency: "목표 통화",
@@ -1048,7 +1228,7 @@ export const translations: Record<string, TranslationDictionary> = {
     translating: "번역 중...",
     exportCsv: "CSV 내보내기",
     sessionTrail: "세션 감사 기록",
-    sessionStats: "통계",
+    sessionStats: "분석",
     noDocs: "처리된 문서 없음.",
     riskDetected: "위험 감지됨",
     clean: "정상",
@@ -1059,6 +1239,13 @@ export const translations: Record<string, TranslationDictionary> = {
     topCategories: "상위 카테고리",
     languages: "감지된 언어",
     seconds: "초",
+    sessionActive: "세션 활성: {minutes}분",
+    sessionPrivacyInfo: "모든 데이터는 브라우저 세션에만 저장됩니다. 종료 시 삭제됩니다.",
+    spendingBreakdown: "카테고리별 지출",
+    vendorFrequency: "상위 공급업체",
+    currencyDist: "통화 분포",
+    recentActivity: "최근 활동",
+    other: "기타",
     documentType: "문서 유형",
     vendorName: "공급업체 이름",
     invoiceDate: "송장 날짜",
@@ -1083,6 +1270,8 @@ export const translations: Record<string, TranslationDictionary> = {
     highRisk: "고위험",
     recalculate: "수정",
     fixAll: "모두 재계산",
+    sensitiveDetected: "민감 정보 감지됨",
+    complianceWarning: "주의해서 취급하고 데이터 보호 규정 준수를 확인하십시오.",
     csvDocumentType: "문서 유형",
     csvVendor: "공급업체",
     csvDate: "날짜",
@@ -1107,6 +1296,10 @@ export const translations: Record<string, TranslationDictionary> = {
     verifyPrices: "가격 확인",
     lowItemCount: "아이템 부족",
     tryAgain: "다시 시도",
+    clearData: "모든 데이터 지우기",
+    clearDataConfirmTitle: "모든 데이터를 지우시겠습니까?",
+    clearDataConfirmMessage: "이 세션에서 처리된 모든 송장이 영구적으로 삭제됩니다. 이 작업은 취소할 수 없습니다.",
+    dataClearedSuccess: "모든 데이터가 지워졌습니다. 세션이 비었습니다.",
 
     // Examples
     tryExample: "예제 시도:",
@@ -1127,11 +1320,16 @@ export const translations: Record<string, TranslationDictionary> = {
     sanitizeBatch: "{count}개 문서 정리",
     processingBatch: "{total} 중 {current} 처리 중: {filename}...",
     batchComplete: "일괄 처리 완료!",
-    exportCombined: "결합된 CSV 내보내기"
+    exportCombined: "결합된 CSV 내보내기",
+
+    // Actions
+    copied: "클립보드에 복사되었습니다!",
+    copyToClipboard: "클립보드에 복사",
+    printPdf: "인쇄 / PDF로 저장"
   },
   Italian: {
-    appTitle: "Supply Chain",
-    sanitizer: "Sanitizer",
+    appTitle: "E.S.T.E.R.",
+    sanitizer: "Beta",
     toggleTheme: "Cambia Tema",
     translateTo: "Traduci In",
     targetCurrency: "Valuta Target",
@@ -1150,7 +1348,7 @@ export const translations: Record<string, TranslationDictionary> = {
     translating: "Traduzione...",
     exportCsv: "Esporta CSV",
     sessionTrail: "Audit Trail Sessione",
-    sessionStats: "Statistiche",
+    sessionStats: "Analitiche",
     noDocs: "Nessun documento elaborato.",
     riskDetected: "Rischio Rilevato",
     clean: "Pulito",
@@ -1161,6 +1359,13 @@ export const translations: Record<string, TranslationDictionary> = {
     topCategories: "Top Categorie",
     languages: "Lingue Rilevate",
     seconds: "s",
+    sessionActive: "Sessione attiva: {minutes}m",
+    sessionPrivacyInfo: "Tutti i dati sono memorizzati solo nella sessione del browser. Verranno cancellati alla chiusura.",
+    spendingBreakdown: "Spesa per Categoria",
+    vendorFrequency: "Top Fornitori",
+    currencyDist: "Distribuzione Valuta",
+    recentActivity: "Attività Recente",
+    other: "Altro",
     documentType: "TIPO DOCUMENTO",
     vendorName: "Fornitore",
     invoiceDate: "Data Fattura",
@@ -1185,6 +1390,8 @@ export const translations: Record<string, TranslationDictionary> = {
     highRisk: "Alto Rischio",
     recalculate: "Correggi",
     fixAll: "Ricalcola Tutto",
+    sensitiveDetected: "Informazioni Sensibili Rilevate",
+    complianceWarning: "Gestire con cura e garantire la conformità alle normative sulla protezione dei dati.",
     csvDocumentType: "Tipo Documento",
     csvVendor: "Fornitore",
     csvDate: "Data",
@@ -1209,6 +1416,10 @@ export const translations: Record<string, TranslationDictionary> = {
     verifyPrices: "Verifica Prezzi",
     lowItemCount: "Poche Voci",
     tryAgain: "Riprova",
+    clearData: "Cancella Tutti i Dati",
+    clearDataConfirmTitle: "Cancellare Tutti i Dati?",
+    clearDataConfirmMessage: "Questo eliminerà permanentemente tutte le fatture elaborate in questa sessione. Questa azione non può essere annullata.",
+    dataClearedSuccess: "Tutti i dati cancellati. La tua sessione è ora vuota.",
 
     // Examples
     tryExample: "Prova Esempio:",
@@ -1229,6 +1440,11 @@ export const translations: Record<string, TranslationDictionary> = {
     sanitizeBatch: "PULISCI {count} DOCUMENTI",
     processingBatch: "Elaborazione {current} di {total}: {filename}...",
     batchComplete: "Elaborazione batch completata!",
-    exportCombined: "Esporta CSV Combinato"
+    exportCombined: "Esporta CSV Combinato",
+
+    // Actions
+    copied: "Copiato negli appunti!",
+    copyToClipboard: "Copia negli Appunti",
+    printPdf: "Stampa / Salva come PDF"
   }
 };

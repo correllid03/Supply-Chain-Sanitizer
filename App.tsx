@@ -6,7 +6,7 @@ import { SessionSidebar } from './components/SessionSidebar';
 import { Navbar } from './components/Navbar';
 import { extractInvoiceData, translateLineItems } from './services/geminiService';
 import { InvoiceData, ProcessingState } from './types';
-import { Loader2, Download, Wand2, ShieldCheck, AlertCircle, Languages, Sun, Moon, Coins, Clock, RefreshCw, FileText, Globe2, Plane, Archive, Layers, AlertTriangle } from 'lucide-react';
+import { Loader2, Download, Wand2, ShieldCheck, AlertCircle, Languages, Sun, Moon, Coins, Clock, RefreshCw, FileText, Globe2, Plane, Archive, Layers, AlertTriangle, Copy, Printer, FileJson, Table } from 'lucide-react';
 import { translations } from './utils/translations';
 import { EXAMPLES } from './utils/exampleData';
 
@@ -24,6 +24,15 @@ const App: React.FC = () => {
   const [exportNotification, setExportNotification] = useState<string | null>(null);
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [showHomeConfirm, setShowHomeConfirm] = useState(false);
+  const [sessionStartTime, setSessionStartTime] = useState<number | null>(null);
+  const [exportFormat, setExportFormat] = useState<string>('csv');
+  
+  // Duplicate Detection State
+  const [duplicateWarning, setDuplicateWarning] = useState<{show: boolean, invoice: InvoiceData | null}>({show: false, invoice: null});
+  
+  // Clear All Data State
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [clearNotification, setClearNotification] = useState<string | null>(null);
 
   // Get current translations
   const t = translations[targetLanguage] || translations['English'];
@@ -33,6 +42,15 @@ const App: React.FC = () => {
 
   // Determine current view for Navbar
   const currentView = invoiceData ? 'editor' : (processingState.status === 'processing' || processingState.status === 'quota_cooldown') ? 'processing' : 'home';
+
+  // Handle session start time
+  useEffect(() => {
+    if (sessionHistory.length > 0 && sessionStartTime === null) {
+        setSessionStartTime(Date.now());
+    } else if (sessionHistory.length === 0) {
+        setSessionStartTime(null);
+    }
+  }, [sessionHistory, sessionStartTime]);
 
   const handleFileSelect = (selectedFiles: File[]) => {
     setFiles(selectedFiles);
@@ -124,11 +142,38 @@ const App: React.FC = () => {
                 isDemo: isDemoMode // Flag as demo
             };
             
-            // If it's the last file (or only file), set it as active
+            // --- DUPLICATE CHECK - FIXED VERSION ---
+            const isDuplicateInHistory = sessionHistory.some(inv => {
+                const vendorMatch = inv.vendorName.toLowerCase().trim() === dataWithId.vendorName.toLowerCase().trim();
+                const dateMatch = inv.invoiceDate === dataWithId.invoiceDate;
+                const amountMatch = Math.abs(inv.totalAmount - dataWithId.totalAmount) < 0.01;
+                
+                if (vendorMatch && dateMatch && amountMatch) {
+                    console.log('DUPLICATE FOUND:', {
+                        existing: { vendor: inv.vendorName, date: inv.invoiceDate, amount: inv.totalAmount },
+                        new: { vendor: dataWithId.vendorName, date: dataWithId.invoiceDate, amount: dataWithId.totalAmount }
+                    });
+                    return true;
+                }
+                return false;
+            });
+
+            console.log('Is Duplicate?', isDuplicateInHistory);
+
+            if (isDuplicateInHistory) {
+                // STOP immediately - show modal, don't add to history
+                setDuplicateWarning({ show: true, invoice: dataWithId });
+                setProcessingState({ status: 'complete' });
+                continue; // Skip to next file in batch (or return if single file)
+            }
+
+            // NOT a duplicate - add to history
+            setSessionHistory(prev => [dataWithId, ...prev]);
+
+            // Set as active if it's the last one processed
             if (i === files.length - 1) {
                 setInvoiceData(dataWithId);
             }
-            setSessionHistory(prev => [dataWithId, ...prev]);
 
             // Rate limiting delay between batch items
             if (i < files.length - 1) {
@@ -158,6 +203,41 @@ const App: React.FC = () => {
     setRetryCountdown(0);
     setFiles([]); // Auto-clear to allow continuous processing
   };
+  
+  const confirmDuplicate = () => {
+      if (duplicateWarning.invoice) {
+          const inv = duplicateWarning.invoice;
+          // Force add to history using functional update
+          setSessionHistory(prev => [inv, ...prev]);
+          setInvoiceData(inv);
+          setDuplicateWarning({ show: false, invoice: null });
+          setFiles([]); // Clear queue after manual add
+      }
+  };
+
+  const cancelDuplicate = () => {
+      setDuplicateWarning({ show: false, invoice: null });
+      // We do not clear files here, giving user chance to try again or clear manually
+  };
+
+  // --- Clear All Data Logic ---
+  const handleClearAllRequest = () => {
+    setShowClearConfirm(true);
+  };
+
+  const confirmClearAll = () => {
+    setFiles([]);
+    setInvoiceData(null);
+    setSessionHistory([]);
+    setProcessingState({ status: 'idle' });
+    setShowClearConfirm(false);
+    setClearNotification(t.dataClearedSuccess);
+    setTimeout(() => setClearNotification(null), 3000);
+  };
+
+  const cancelClearAll = () => {
+    setShowClearConfirm(false);
+  };
 
   useEffect(() => {
     if (processingState.status === 'quota_cooldown' && retryCountdown > 0) {
@@ -178,7 +258,7 @@ const App: React.FC = () => {
 
   const handleHistorySelect = (data: InvoiceData) => {
       setInvoiceData(data);
-      if (data.language && ['English', 'Spanish', 'French', 'German', 'Chinese', 'Japanese', 'Portuguese', 'Turkish', 'Polish', 'Hindi', 'Arabic'].includes(data.language)) {
+      if (data.language && ['English', 'Spanish', 'French', 'German', 'Chinese', 'Japanese', 'Portuguese', 'Korean', 'Italian', 'Hindi', 'Arabic'].includes(data.language)) {
           setTargetLanguage(data.language);
       } else {
           setTargetLanguage('Original');
@@ -265,32 +345,155 @@ const App: React.FC = () => {
     setTargetCurrency(e.target.value);
   };
 
+  const handleCopyToClipboard = useCallback(async () => {
+    if (!invoiceData) return;
+    const headers = [t.sku, t.description, t.glCategory, t.qty, t.unitPrice, t.lineTotal];
+    const rows = invoiceData.lineItems.map(item => [
+        item.sku,
+        item.description,
+        item.glCategory,
+        item.quantity,
+        item.unitPrice,
+        (item.totalAmount || 0).toFixed(2)
+    ]);
+    const tsvContent = [headers.join('\t'), ...rows.map(row => row.join('\t'))].join('\n');
+    
+    try {
+        await navigator.clipboard.writeText(tsvContent);
+        setExportNotification(t.copied);
+        setTimeout(() => setExportNotification(null), 3000);
+    } catch (err) {
+        console.error('Failed to copy', err);
+    }
+  }, [invoiceData, t]);
+
+  const handlePrint = useCallback(() => {
+      window.print();
+  }, []);
+
+  // Helper to generate CSV based on format
+  const generateCSV = (data: InvoiceData[], format: string) => {
+    // 1. Generic CSV (Default)
+    if (format === 'csv') {
+       const headers = [t.csvDocumentType, t.csvVendor, t.csvDate, t.csvTotalAmount, t.csvCurrency, t.csvSku, t.csvDescription, t.csvGlCategory, t.csvQuantity, t.csvUnitPrice, t.csvLineTotal];
+       const allRows = data.flatMap(doc => doc.lineItems.map(item => [
+            `"${(doc.documentType || 'Unknown').replace(/"/g, '""')}"`,
+            `"${doc.vendorName.replace(/"/g, '""')}"`,
+            doc.invoiceDate,
+            doc.totalAmount,
+            doc.currencySymbol || '$',
+            `"${(item.sku || '').replace(/"/g, '""')}"`,
+            `"${item.description.replace(/"/g, '""')}"`,
+            `"${(item.glCategory || '').replace(/"/g, '""')}"`,
+            item.quantity,
+            item.unitPrice,
+            (item.totalAmount || 0).toFixed(2)
+       ]));
+       return [headers.join(','), ...allRows.map(row => row.join(','))].join('\n');
+    }
+    
+    // 2. QuickBooks
+    if (format === 'quickbooks') {
+        const headers = ['Customer', 'InvoiceDate', 'Item', 'Quantity', 'Rate', 'Amount'];
+        const allRows = data.flatMap(doc => doc.lineItems.map(item => {
+            // QB usually needs MM/DD/YYYY
+            const d = new Date(doc.invoiceDate);
+            const qbDate = `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;
+            return [
+                `"${doc.vendorName.replace(/"/g, '""')}"`,
+                qbDate,
+                `"${item.description.replace(/"/g, '""')}"`,
+                item.quantity,
+                item.unitPrice,
+                (item.totalAmount || 0).toFixed(2)
+            ];
+        }));
+        return [headers.join(','), ...allRows.map(row => row.join(','))].join('\n');
+    }
+
+    // 3. Xero
+    if (format === 'xero') {
+        const headers = ['*ContactName', '*InvoiceDate', '*DueDate', '*Description', '*Quantity', '*UnitAmount', '*AccountCode', 'TaxType'];
+        const allRows = data.flatMap(doc => doc.lineItems.map(item => [
+            `"${doc.vendorName.replace(/"/g, '""')}"`,
+            doc.invoiceDate,
+            '', // Due Date blank
+            `"${item.description.replace(/"/g, '""')}"`,
+            item.quantity,
+            item.unitPrice,
+            `"${(item.glCategory || '').replace(/"/g, '""')}"`, // Map GL to AccountCode
+            'Tax Exempt'
+        ]));
+        return [headers.join(','), ...allRows.map(row => row.join(','))].join('\n');
+    }
+    
+    // 4. SAP (Pipe Delimited)
+    if (format === 'sap') {
+        const headers = ['HDR', 'Vendor', 'Date', 'Total', '|', 'ITM', 'Material', 'Desc', 'Qty', 'Price'];
+        const allRows = data.flatMap(doc => doc.lineItems.map(item => [
+            'HDR', doc.vendorName, doc.invoiceDate, doc.totalAmount, '|', 
+            'ITM', item.sku, item.description, item.quantity, item.unitPrice
+        ]));
+        // SAP often uses | as delimiter
+        return [headers.join('|'), ...allRows.map(row => row.join('|'))].join('\n');
+    }
+
+    // 5. Excel (Tab Delimited usually safer, but sticking to CSV for now with BOM)
+    // Re-use Generic logic but maybe different headers
+    return generateCSV(data, 'csv');
+  };
+
   const handleDownloadCSV = useCallback(() => {
     if (!invoiceData) return;
-    const headers = [t.csvDocumentType, t.csvVendor, t.csvDate, t.csvTotalAmount, t.csvCurrency, t.csvSku, t.csvDescription, t.csvGlCategory, t.csvQuantity, t.csvUnitPrice, t.csvLineTotal];
-    const rows = invoiceData.lineItems.map(item => [
-      `"${(invoiceData.documentType || 'Unknown').replace(/"/g, '""')}"`,
-      `"${invoiceData.vendorName.replace(/"/g, '""')}"`,
-      invoiceData.invoiceDate,
-      invoiceData.totalAmount,
-      invoiceData.currencySymbol || '$',
-      `"${(item.sku || '').replace(/"/g, '""')}"`,
-      `"${item.description.replace(/"/g, '""')}"`,
-      `"${(item.glCategory || '').replace(/"/g, '""')}"`,
-      item.quantity,
-      item.unitPrice,
-      (item.totalAmount || 0).toFixed(2)
-    ]);
-    const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
+    const csvContent = generateCSV([invoiceData], exportFormat);
     const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `sanitized_${(invoiceData.documentType || 'doc').toLowerCase().replace(/\s/g, '_')}_${invoiceData.vendorName || 'export'}.csv`);
+    link.setAttribute('download', `sanitized_${exportFormat}_${(invoiceData.documentType || 'doc').toLowerCase().replace(/\s/g, '_')}_${invoiceData.vendorName || 'export'}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     setExportNotification(`✓ ${t.batchComplete} (${invoiceData.lineItems.length} items)`);
+    setTimeout(() => setExportNotification(null), 3000);
+  }, [invoiceData, t, exportFormat]);
+
+  const handleDownloadExcel = useCallback(() => {
+    if (!invoiceData) return;
+    
+    const headers = [t.csvDocumentType, t.csvVendor, t.csvDate, t.csvTotalAmount, t.csvCurrency, t.csvSku, t.csvDescription, t.csvGlCategory, t.csvQuantity, t.csvUnitPrice, t.csvLineTotal];
+    
+    // Simple HTML Table format for Excel
+    let tableHtml = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta http-equiv="content-type" content="text/plain; charset=UTF-8"/></head><body><table><thead><tr>';
+    headers.forEach(h => tableHtml += `<th>${h}</th>`);
+    tableHtml += '</tr></thead><tbody>';
+    
+    invoiceData.lineItems.forEach(item => {
+        tableHtml += '<tr>';
+        tableHtml += `<td>${invoiceData.documentType || ''}</td>`;
+        tableHtml += `<td>${invoiceData.vendorName}</td>`;
+        tableHtml += `<td>${invoiceData.invoiceDate}</td>`;
+        tableHtml += `<td>${invoiceData.totalAmount}</td>`;
+        tableHtml += `<td>${invoiceData.currencySymbol}</td>`;
+        tableHtml += `<td>${item.sku || ''}</td>`;
+        tableHtml += `<td>${item.description}</td>`;
+        tableHtml += `<td>${item.glCategory}</td>`;
+        tableHtml += `<td>${item.quantity}</td>`;
+        tableHtml += `<td>${item.unitPrice}</td>`;
+        tableHtml += `<td>${item.totalAmount}</td>`;
+        tableHtml += '</tr>';
+    });
+    tableHtml += '</tbody></table></body></html>';
+
+    const blob = new Blob([tableHtml], { type: 'application/vnd.ms-excel' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `sanitized_${(invoiceData.documentType || 'doc').toLowerCase().replace(/\s/g, '_')}_${invoiceData.vendorName || 'export'}.xls`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setExportNotification(`✓ Exported to Excel`);
     setTimeout(() => setExportNotification(null), 3000);
   }, [invoiceData, t]);
 
@@ -322,7 +525,7 @@ const App: React.FC = () => {
                     break;
                 case 'home':
                     e.preventDefault();
-                    handleNavigateHome(); // Updated to check for confirmation
+                    handleNavigateHome(); 
                     break;
             }
         }
@@ -346,33 +549,12 @@ const App: React.FC = () => {
 
   const handleExportAll = () => {
     if (sessionHistory.length === 0) return;
-    
-    // Combined CSV Export
-    const headers = [t.csvDocumentType, t.csvVendor, t.csvDate, t.csvTotalAmount, t.csvCurrency, t.csvSku, t.csvDescription, t.csvGlCategory, t.csvQuantity, t.csvUnitPrice, t.csvLineTotal];
-    
-    // Flatten all items from all documents
-    const allRows = sessionHistory.flatMap(doc => {
-        return doc.lineItems.map(item => [
-            `"${(doc.documentType || 'Unknown').replace(/"/g, '""')}"`,
-            `"${doc.vendorName.replace(/"/g, '""')}"`,
-            doc.invoiceDate,
-            doc.totalAmount,
-            doc.currencySymbol || '$',
-            `"${(item.sku || '').replace(/"/g, '""')}"`,
-            `"${item.description.replace(/"/g, '""')}"`,
-            `"${(item.glCategory || '').replace(/"/g, '""')}"`,
-            item.quantity,
-            item.unitPrice,
-            (item.totalAmount || 0).toFixed(2)
-        ]);
-    });
-
-    const csvContent = [headers.join(','), ...allRows.map(row => row.join(','))].join('\n');
+    const csvContent = generateCSV(sessionHistory, exportFormat);
     const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `combined_export_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `combined_export_${exportFormat}_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -423,9 +605,13 @@ const App: React.FC = () => {
                     onSelect={handleHistorySelect}
                     onNewInvoice={handleNewInvoice}
                     onExportAll={handleExportAll}
+                    onClearAll={handleClearAllRequest}
                     t={t}
                     isDemoMode={isDemoMode}
                     onToggleDemoMode={() => setIsDemoMode(!isDemoMode)}
+                    sessionStartTime={sessionStartTime}
+                    exportFormat={exportFormat}
+                    onFormatChange={setExportFormat}
                 />
             </aside>
 
@@ -443,9 +629,13 @@ const App: React.FC = () => {
                             onSelect={handleHistorySelect}
                             onNewInvoice={handleNewInvoice}
                             onExportAll={handleExportAll}
+                            onClearAll={handleClearAllRequest}
                             t={t}
                             isDemoMode={isDemoMode}
                             onToggleDemoMode={() => setIsDemoMode(!isDemoMode)}
+                            sessionStartTime={sessionStartTime}
+                            exportFormat={exportFormat}
+                            onFormatChange={setExportFormat}
                         />
                     </aside>
                 </div>
@@ -495,8 +685,6 @@ const App: React.FC = () => {
                                 disabled={processingState.status === 'processing' || processingState.status === 'quota_cooldown'}
                                 onError={handleError}
                                 t={t}
-                                isDemoMode={isDemoMode}
-                                onToggleDemoMode={() => setIsDemoMode(!isDemoMode)}
                             />
 
                             {/* Error & Quota Messages */}
@@ -575,23 +763,64 @@ const App: React.FC = () => {
                                     <span className="w-2 h-6 bg-indigo-500 rounded-full mr-3"></span>
                                     {t.extractedData}
                                 </h2>
-                                <div className="flex items-center space-x-4">
+                                
+                                {/* Unified Data Actions Toolbar (Verbose Labeled Buttons) */}
+                                <div className="flex items-center gap-2">
                                     {isTranslating && (
-                                        <span className="flex items-center text-xs font-semibold text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/10 px-3 py-1.5 rounded-full animate-pulse border border-indigo-200 dark:border-indigo-500/20">
+                                        <span className="flex items-center text-xs font-semibold text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/10 px-3 py-1.5 rounded-full animate-pulse border border-indigo-200 dark:border-indigo-500/20 mr-2">
                                             <Languages className="w-3 h-3 mr-2" />
                                             {t.translating}
                                         </span>
                                     )}
-                                    <button onClick={handleDownloadJSON} className="px-3 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg flex items-center space-x-2 transition-all font-semibold text-xs border border-slate-200 dark:border-slate-700">
-                                        <FileText className="w-4 h-4" />
-                                        <span className="hidden sm:inline">JSON</span>
-                                    </button>
-                                    <button
-                                    onClick={handleDownloadCSV}
-                                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 rounded-lg flex items-center space-x-2 transition-all font-semibold text-sm transform hover:-translate-y-0.5"
+                                    
+                                    {/* Copy Data */}
+                                    <button 
+                                      onClick={handleCopyToClipboard} 
+                                      className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg shadow-sm transition-all"
+                                      title={t.copyToClipboard}
                                     >
-                                    <Download className="w-4 h-4" />
-                                    <span>{t.exportCsv}</span>
+                                        <Copy className="w-4 h-4" />
+                                        <span>Copy Data</span>
+                                    </button>
+
+                                    {/* Excel Button */}
+                                    <button 
+                                      onClick={handleDownloadExcel} 
+                                      className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg shadow-sm transition-all"
+                                      title="Save as Excel"
+                                    >
+                                        <Table className="w-4 h-4" />
+                                        <span>Save Excel</span>
+                                    </button>
+
+                                    {/* Print Button */}
+                                    <button 
+                                      onClick={() => window.print()} 
+                                      className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg shadow-sm transition-all"
+                                      title={t.printPdf}
+                                    >
+                                        <Printer className="w-4 h-4" />
+                                        <span>Print / PDF</span>
+                                    </button>
+
+                                    {/* JSON Button (Verbose) */}
+                                    <button 
+                                      onClick={handleDownloadJSON} 
+                                      className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg shadow-sm transition-all"
+                                      title="Download JSON"
+                                    >
+                                        <FileJson className="w-4 h-4" />
+                                        <span>JSON</span>
+                                    </button>
+                                    
+                                    {/* Export CSV (Harmonized) */}
+                                    <button
+                                      onClick={handleDownloadCSV}
+                                      className="flex items-center gap-2 px-3 py-2 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/30 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 text-xs font-bold rounded-lg shadow-sm transition-all ml-1"
+                                      title={t.exportCsv}
+                                    >
+                                      <Download className="w-4 h-4" />
+                                      <span>{t.exportCsv}</span>
                                     </button>
                                 </div>
                             </div>
@@ -599,6 +828,21 @@ const App: React.FC = () => {
                             {exportNotification && (
                                 <div className="p-3 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-lg text-emerald-700 dark:text-emerald-400 text-xs font-bold text-center animate-in fade-in slide-in-from-top-2 duration-300">
                                     {exportNotification}
+                                </div>
+                            )}
+                            
+                            {/* Sensitive Data Warning */}
+                            {invoiceData.hasSensitiveData && (
+                                <div className="p-4 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-xl flex items-start space-x-3 animate-in fade-in slide-in-from-top-2">
+                                    <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-500 shrink-0 mt-0.5" />
+                                    <div>
+                                        <h3 className="text-sm font-bold text-amber-800 dark:text-amber-400">
+                                            {t.sensitiveDetected}: <span className="font-normal text-amber-700 dark:text-amber-300">{invoiceData.sensitiveDataTypes?.join(', ')}</span>
+                                        </h3>
+                                        <p className="text-xs text-amber-600 dark:text-amber-500/80 mt-1">
+                                            {t.complianceWarning}
+                                        </p>
+                                    </div>
                                 </div>
                             )}
                             
@@ -615,7 +859,7 @@ const App: React.FC = () => {
             </main>
         </div>
 
-        {/* Confirmation Modal */}
+        {/* Confirmation Modal - Navigation */}
         {showHomeConfirm && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
                 <div 
@@ -649,6 +893,102 @@ const App: React.FC = () => {
                             className="px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-500 rounded-lg shadow-lg shadow-red-500/20 transition-all transform hover:-translate-y-0.5"
                         >
                             Start New Invoice
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+        
+        {/* Clear All Data Confirmation Modal */}
+        {showClearConfirm && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                <div 
+                    className="absolute inset-0 bg-black/40 dark:bg-black/60 backdrop-blur-sm transition-opacity"
+                    onClick={cancelClearAll}
+                />
+                <div className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200">
+                    <div className="flex items-start space-x-4">
+                        <div className="p-3 bg-red-100 dark:bg-red-500/10 rounded-full shrink-0">
+                            <AlertTriangle className="w-6 h-6 text-red-600 dark:text-red-500" />
+                        </div>
+                        <div className="flex-1">
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">
+                                {t.clearDataConfirmTitle}
+                            </h3>
+                            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                                {t.clearDataConfirmMessage.replace('{count}', sessionHistory.length.toString())}
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <div className="mt-8 flex items-center justify-end space-x-3">
+                        <button
+                            onClick={cancelClearAll}
+                            className="px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={confirmClearAll}
+                            className="px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-500 rounded-lg shadow-lg shadow-red-500/20 transition-all transform hover:-translate-y-0.5"
+                        >
+                            Clear All Data
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+        
+        {/* Success Toast for Clear Data */}
+        {clearNotification && (
+             <div className="fixed bottom-6 right-6 z-[150] p-4 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-xl shadow-2xl flex items-center space-x-3 animate-in slide-in-from-bottom-5 duration-300">
+                <div className="p-1 bg-emerald-100 dark:bg-emerald-500/20 rounded-full">
+                    <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <p className="text-sm font-bold text-emerald-800 dark:text-emerald-400">{clearNotification}</p>
+             </div>
+        )}
+
+        {/* Duplicate Warning Modal */}
+        {duplicateWarning.show && duplicateWarning.invoice && (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+                <div 
+                    className="absolute inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm transition-opacity"
+                    onClick={cancelDuplicate}
+                />
+                <div className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200">
+                    <div className="flex items-start space-x-4">
+                        <div className="p-3 bg-indigo-100 dark:bg-indigo-500/10 rounded-full shrink-0">
+                            <Copy className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+                        </div>
+                        <div className="flex-1">
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">
+                                Possible Duplicate Detected
+                            </h3>
+                            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                                An invoice from <span className="font-bold text-slate-900 dark:text-white">{duplicateWarning.invoice.vendorName}</span> 
+                                {' '}on <span className="font-mono">{duplicateWarning.invoice.invoiceDate}</span> 
+                                {' '}for <span className="font-bold text-slate-900 dark:text-white">{duplicateWarning.invoice.currencySymbol}{duplicateWarning.invoice.totalAmount.toFixed(2)}</span> 
+                                {' '}already exists in this session.
+                            </p>
+                            <p className="text-xs text-slate-500 mt-2 italic">
+                                This might be a duplicate upload.
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <div className="mt-8 flex items-center justify-end space-x-3">
+                        <button
+                            onClick={cancelDuplicate}
+                            className="px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                        >
+                            Cancel Upload
+                        </button>
+                        <button
+                            onClick={confirmDuplicate}
+                            className="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-lg shadow-indigo-500/20 transition-all transform hover:-translate-y-0.5"
+                        >
+                            Add Anyway
                         </button>
                     </div>
                 </div>

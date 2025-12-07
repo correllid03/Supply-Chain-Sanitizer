@@ -1,5 +1,5 @@
 {
-  "name": "Supply Chain Invoice Sanitizer",
-  "description": "An enterprise-grade tool to extract, clean, and export structured data from invoices and packing slips using Gemini AI.",
+  "name": "E.S.T.E.R. Beta - Enterprise Audit",
+  "description": "AI-Powered Transactional Reconciliation System",
   "requestFramePermissions": []
 }
