@@ -1,4 +1,3 @@
-
 import { InvoiceData } from "../types";
 
 export const EXAMPLES: Record<string, InvoiceData> = {

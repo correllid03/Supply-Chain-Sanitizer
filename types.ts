@@ -1,4 +1,3 @@
-
 export interface LineItem {
   sku: string;
   description: string;
@@ -24,6 +23,7 @@ export interface InvoiceData {
   originalLineItems?: LineItem[]; // Backup of the original extraction for reverting/re-translating
   processingTimeMs?: number; // Time taken to process this document
   isDemo?: boolean; // Flag for mock data
+  languageConfidence?: number; // Confidence score for detected language
   
   // Quality Indicators
   validationFlags?: {

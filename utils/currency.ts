@@ -1,4 +1,3 @@
-
 export const CURRENCY_RATES: Record<string, number> = {
   'USD': 1.0,
   'EUR': 0.92, // 1 USD = 0.92 EUR

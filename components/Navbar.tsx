@@ -1,6 +1,5 @@
-
 import React, { useState } from 'react';
-import { Hexagon, Sun, Moon, Coins, Languages, Plus, History, ChevronRight, Home, Loader2 } from 'lucide-react';
+import { Hexagon, Sun, Moon, Coins, Languages, Plus, PanelLeft, ChevronRight, Home, Loader2, Globe } from 'lucide-react';
 import { TranslationDictionary } from '../utils/translations';
 
 interface NavbarProps {
@@ -18,6 +17,8 @@ interface NavbarProps {
   onCurrencyChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
   targetLanguage: string;
   onLanguageChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+  interfaceLanguage: string;
+  onInterfaceLanguageChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
   isTranslating: boolean;
 }
 
@@ -36,6 +37,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onCurrencyChange,
   targetLanguage,
   onLanguageChange,
+  interfaceLanguage,
+  onInterfaceLanguageChange,
   isTranslating
 }) => {
   const [showDecoder, setShowDecoder] = useState(false);
@@ -141,84 +144,113 @@ export const Navbar: React.FC<NavbarProps> = ({
              </button>
           )}
 
-          {/* Currency Dropdown */}
-          <div className="hidden lg:flex items-center space-x-2 bg-white dark:bg-slate-800 rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm group h-10">
-              <Coins className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors shrink-0" />
+          {/* SESSION CONTROLS GROUP */}
+          <div className="flex items-center space-x-2 border-r border-slate-200 dark:border-slate-700 pr-3 mr-1">
+            {/* Currency Dropdown */}
+            <div className="hidden lg:flex items-center space-x-2 bg-white dark:bg-slate-800 rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm group h-10">
+                <Coins className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors shrink-0" />
+                <div className="flex flex-col justify-center">
+                  <label htmlFor="currency-select" className="text-[9px] text-slate-500 dark:text-slate-400 font-bold uppercase leading-none mb-0.5">
+                    {t.targetCurrency}
+                  </label>
+                  <select 
+                    id="currency-select"
+                    value={targetCurrency}
+                    onChange={onCurrencyChange}
+                    className="bg-transparent text-xs font-bold text-black dark:text-white focus:outline-none cursor-pointer pr-1 min-w-[60px]"
+                  >
+                    <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="Original">{t.original}</option>
+                    <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="USD">USD ($)</option>
+                    <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="EUR">EUR (€)</option>
+                    <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="GBP">GBP (£)</option>
+                    <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="JPY">JPY (¥)</option>
+                    <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="CNY">CNY (¥)</option>
+                    <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="CAD">CAD (C$)</option>
+                    <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="MXN">MXN ($)</option>
+                    <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="AUD">AUD (A$)</option>
+                    <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="KRW">KRW (₩)</option>
+                    <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="INR">INR (₹)</option>
+                  </select>
+                </div>
+            </div>
+
+            {/* DATA LANGUAGE Dropdown */}
+            <div className="hidden md:flex items-center space-x-2 bg-white dark:bg-slate-800 rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm group h-10">
+              {isTranslating ? (
+                <Loader2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400 animate-spin shrink-0" />
+              ) : (
+                <Languages className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors shrink-0" />
+              )}
               <div className="flex flex-col justify-center">
-                <label htmlFor="currency-select" className="text-[9px] text-slate-500 dark:text-slate-400 font-bold uppercase leading-none mb-0.5">
-                  {t.targetCurrency}
+                <label htmlFor="language-select" className="text-[9px] text-slate-500 dark:text-slate-400 font-bold uppercase leading-none mb-0.5">
+                  {t.translateTo}
                 </label>
                 <select 
-                  id="currency-select"
-                  value={targetCurrency}
-                  onChange={onCurrencyChange}
-                  className="bg-transparent text-xs font-bold text-black dark:text-white focus:outline-none cursor-pointer pr-1 min-w-[60px]"
+                  id="language-select"
+                  value={targetLanguage}
+                  onChange={onLanguageChange}
+                  disabled={isTranslating}
+                  className="bg-transparent text-xs font-bold text-black dark:text-white focus:outline-none disabled:opacity-50 cursor-pointer pr-1 min-w-[80px]"
                 >
                   <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="Original">{t.original}</option>
-                  <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="USD">USD ($)</option>
-                  <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="EUR">EUR (€)</option>
-                  <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="GBP">GBP (£)</option>
-                  <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="JPY">JPY (¥)</option>
-                  <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="CNY">CNY (¥)</option>
-                  <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="CAD">CAD (C$)</option>
-                  <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="MXN">MXN ($)</option>
-                  <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="AUD">AUD (A$)</option>
-                  <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="KRW">KRW (₩)</option>
-                  <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="INR">INR (₹)</option>
+                  <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="English">English</option>
+                  <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="Spanish">Spanish</option>
+                  <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="French">French</option>
+                  <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="German">German</option>
+                  <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="Chinese">Chinese</option>
+                  <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="Japanese">Japanese</option>
+                  <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="Korean">Korean</option>
+                  <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="Italian">Italian</option>
+                  <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="Portuguese">Portuguese</option>
+                  <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="Hindi">Hindi</option>
+                  <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="Arabic">Arabic</option>
                 </select>
               </div>
+            </div>
           </div>
 
-          {/* Translation Dropdown */}
-          <div className="hidden md:flex items-center space-x-2 bg-white dark:bg-slate-800 rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm group h-10">
-            {isTranslating ? (
-              <Loader2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400 animate-spin shrink-0" />
-            ) : (
-              <Languages className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors shrink-0" />
-            )}
-            <div className="flex flex-col justify-center">
-              <label htmlFor="language-select" className="text-[9px] text-slate-500 dark:text-slate-400 font-bold uppercase leading-none mb-0.5">
-                {t.translateTo}
-              </label>
-              <select 
-                id="language-select"
-                value={targetLanguage}
-                onChange={onLanguageChange}
-                disabled={isTranslating}
-                className="bg-transparent text-xs font-bold text-black dark:text-white focus:outline-none disabled:opacity-50 cursor-pointer pr-1 min-w-[80px]"
-              >
-                <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="Original">{t.original}</option>
-                <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="English">English</option>
-                <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="Spanish">Spanish</option>
-                <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="French">French</option>
-                <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="German">German</option>
-                <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="Chinese">Chinese</option>
-                <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="Japanese">Japanese</option>
-                <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="Korean">Korean</option>
-                <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="Italian">Italian</option>
-                <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="Portuguese">Portuguese</option>
-                <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="Hindi">Hindi</option>
-                <option className="bg-white text-black dark:bg-slate-800 dark:text-white" value="Arabic">Arabic</option>
-              </select>
-            </div>
+          {/* APP SETTINGS GROUP */}
+          <div className="flex items-center space-x-2">
+             {/* INTERFACE LANGUAGE Dropdown */}
+             {/* FIXED: Added relative positioning to parent so absolute select doesn't overflow */}
+             <div className="hidden md:flex items-center space-x-2 bg-white dark:bg-slate-800 rounded-lg border border-slate-300 dark:border-slate-600 px-2 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm group h-10 w-10 justify-center relative" title={t.interfaceLanguage || "Interface Language"}>
+                <Globe className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors" />
+                <select 
+                  value={interfaceLanguage}
+                  onChange={onInterfaceLanguageChange}
+                  className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
+                >
+                  <option value="English">English</option>
+                  <option value="Spanish">Español</option>
+                  <option value="French">Français</option>
+                  <option value="German">Deutsch</option>
+                  <option value="Chinese">中文</option>
+                  <option value="Japanese">日本語</option>
+                  <option value="Portuguese">Português</option>
+                  <option value="Hindi">हिन्दी</option>
+                  <option value="Arabic">العربية</option>
+                  <option value="Korean">한국어</option>
+                  <option value="Italian">Italiano</option>
+                </select>
+             </div>
+
+             {/* Theme Toggle */}
+             <button 
+                onClick={toggleTheme}
+                className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-white hover:bg-slate-50 dark:hover:bg-slate-700 transition-all shadow-sm focus:outline-none group h-10 w-10 flex items-center justify-center"
+                title={t.toggleTheme}
+             >
+                {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4 group-hover:text-black" />}
+             </button>
           </div>
           
           {/* History Toggle (Mobile/Tablet) */}
           <button
             onClick={onToggleHistory}
-            className="p-2 lg:hidden rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-white hover:bg-slate-50 dark:hover:bg-slate-700 transition-all shadow-sm focus:outline-none h-9 w-9 flex items-center justify-center"
-            title={t.history}
+            className="p-2 lg:hidden rounded-lg bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition-all shadow-sm focus:outline-none h-10 w-10 flex items-center justify-center"
+            title={t.sessionMenu}
           >
-            <History className="w-4 h-4" />
-          </button>
-
-          {/* Theme Toggle */}
-          <button 
-            onClick={toggleTheme}
-            className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-white hover:bg-slate-50 dark:hover:bg-slate-700 transition-all shadow-sm focus:outline-none group h-9 w-9 flex items-center justify-center"
-            title={t.toggleTheme}
-          >
-            {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4 group-hover:text-black" />}
+            <PanelLeft className="w-4 h-4" />
           </button>
 
           {/* System Status Indicator */}

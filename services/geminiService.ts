@@ -17,6 +17,7 @@ const invoiceSchema = {
     totalAmount: { type: Type.NUMBER, description: "The total amount due on the invoice." },
     currencySymbol: { type: Type.STRING, description: "The currency symbol used in the invoice (e.g., $, €, £, ¥). Default to $ if unsure." },
     language: { type: Type.STRING, description: "The primary language of the document (e.g., English, Spanish, Thai, Vietnamese)." },
+    languageConfidence: { type: Type.NUMBER, description: "Confidence score (0-100) for the detected language." },
     lineItems: {
       type: Type.ARRAY,
       description: "List of items purchased.",
@@ -39,7 +40,7 @@ const invoiceSchema = {
   required: ["documentType", "vendorName", "totalAmount", "lineItems", "currencySymbol", "language"]
 };
 
-// Helper to clean garbage from numbers (e.g. "2953.2!" -> 2953.2)
+// Helper to clean garbage from numbers
 const cleanNumber = (val: any): number => {
   if (typeof val === 'number') return val;
   if (!val) return 0;
@@ -90,6 +91,7 @@ const generateMockInvoice = (): InvoiceData => {
     isDemo: true,
     language: 'Original',
     detectedLanguage: 'English',
+    languageConfidence: 99,
     confidenceScore: 'High',
     validationFlags: { 
       hasZeroPrices: false, 
@@ -138,9 +140,17 @@ const assessExtractionQuality = (data: InvoiceData): InvoiceData => {
   // If AI detected a language, check if we have a translation dictionary for it
   if (data.language && data.language !== 'Original') {
       const supportedLangs = Object.keys(translations);
-      const isSupported = supportedLangs.some(lang => lang.toLowerCase() === data.language?.toLowerCase());
-      if (!isSupported) {
-           console.warn(`Unsupported Language Detected: ${data.language}`);
+      // Expanded whitelist for common European/Asian trade languages even if UI doesn't fully support them yet
+      const extendedWhitelist = [...supportedLangs, 'Italian', 'French', 'Dutch', 'Portuguese', 'Swedish', 'Danish'];
+      
+      const isSupported = extendedWhitelist.some(lang => lang.toLowerCase() === data.language?.toLowerCase());
+      
+      // CONFIDENCE OVERRIDE: If confidence is > 90%, we trust it even if we don't have a UI translation for it.
+      // This prevents flagging valid invoices as "unsupported" just because we lack a dictionary.
+      const confidence = data.languageConfidence || 0;
+      
+      if (!isSupported && confidence < 90) {
+           console.warn(`Unsupported Language Detected: ${data.language} (Confidence: ${confidence}%)`);
            flags.unsupportedLanguage = true;
       }
   }
@@ -150,7 +160,8 @@ const assessExtractionQuality = (data: InvoiceData): InvoiceData => {
   
   if (flags.missingMetadata || flags.unsupportedCurrency) {
     score = 'Low';
-  } else if (flags.hasZeroPrices || flags.lowItemCount || flags.unsupportedLanguage) {
+  } else if (flags.hasZeroPrices || flags.lowItemCount) {
+    // Note: Removed unsupportedLanguage from Medium score trigger if confidence is high
     score = 'Medium';
   }
 
@@ -235,9 +246,15 @@ export const extractInvoiceData = async (file: File, isDemoMode: boolean = false
           {
             text: `Analyze this supply chain document.
 CORE OBJECTIVE: EXTRACT EVERY SINGLE LINE ITEM.
+LANGUAGE DETECTION RULES:
+- Scan for "Rechnung", "Steuernummer", "USt" -> Source Language = German
+- Scan for "請求書", "円", "税" -> Source Language = Japanese
+- Scan for "Facture", "TVA" -> Source Language = French
+- Scan for "Fattura", "IVA" -> Source Language = Italian
+
 1. Extract SKU, Description, Quantity, Unit Price, Total.
 2. Infer 'glCategory' for each item. Provide 'glConfidence' (0-100) and 'glReasoning'.
-3. Detect the document 'language' (e.g. English, Spanish, Thai).
+3. Detect the document 'language' (e.g. English, German, Japanese). Provide 'languageConfidence' (0-100).
 4. Identify 'currencySymbol' or code.
 5. Clean numbers (remove symbols).
 Output JSON.`
