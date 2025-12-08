@@ -96,6 +96,9 @@ const App: React.FC = () => {
         // Examples set the DATA language, not UI language
         if (key === 'multilang') setTargetLanguage('Original');
         if (key === 'receipt') setTargetLanguage('English');
+
+        // Clear files queue so the dummy file doesn't persist in the UI
+        setFiles([]);
     }
   };
 

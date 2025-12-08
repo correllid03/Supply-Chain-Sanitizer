@@ -1,3 +1,4 @@
+
 export interface TranslationDictionary {
   appTitle: string;
   sanitizer: string;
@@ -126,6 +127,10 @@ export interface TranslationDictionary {
   copied: string;
   copyToClipboard: string;
   printPdf: string;
+
+  // Mobile Scan
+  initScan: string;
+  scanInvoice: string;
 }
 
 const baseEnglish: TranslationDictionary = {
@@ -239,7 +244,9 @@ const baseEnglish: TranslationDictionary = {
     exportCombined: "Export Combined CSV",
     copied: "Copied to clipboard!",
     copyToClipboard: "Copy to Clipboard",
-    printPdf: "Print / Save as PDF"
+    printPdf: "Print / Save as PDF",
+    initScan: "INITIALIZE SCAN",
+    scanInvoice: "Scan Invoice"
 };
 
 // For now, we populate other languages with English defaults to prevent crashes

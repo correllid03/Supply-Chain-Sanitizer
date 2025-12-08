@@ -3,8 +3,6 @@ import { InvoiceData, LineItem } from "../types";
 import { CURRENCY_RATES, getCurrencyCode } from '../utils/currency';
 import { translations } from '../utils/translations';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 const invoiceSchema = {
   type: Type.OBJECT,
   properties: {
@@ -230,6 +228,10 @@ export const extractInvoiceData = async (file: File, isDemoMode: boolean = false
     return generateMockInvoice();
   }
 
+  // MOVED INITIALIZATION INSIDE FUNCTION
+  // This prevents potential issues with stale client instances or API key availability race conditions
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
   try {
     const base64Data = await fileToGenerativePart(file);
 
@@ -313,6 +315,8 @@ Output JSON.`
 
 export const translateLineItems = async (items: LineItem[], targetLanguage: string): Promise<LineItem[]> => {
   if (items.length === 0) return items;
+  // MOVED INITIALIZATION INSIDE FUNCTION
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
      const prompt = `Translate 'description' and 'glCategory' to ${targetLanguage}. Return JSON array of objects with index, translatedDescription, translatedCategory. Input: ${JSON.stringify(items.map((item, i) => ({index: i, desc: item.description, cat: item.glCategory})))}`;
      

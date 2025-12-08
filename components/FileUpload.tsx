@@ -1,5 +1,6 @@
+
 import React, { useRef, useState, useCallback } from 'react';
-import { Upload, FileText, X, Sparkles, Files, Layers, Lock } from 'lucide-react';
+import { Upload, FileText, X, Sparkles, Files, Layers, Lock, Aperture, Camera } from 'lucide-react';
 import { TranslationDictionary } from '../utils/translations';
 
 interface FileUploadProps {
@@ -25,6 +26,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const MAX_FILES = 5;
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -118,7 +120,33 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         </div>
       )}
 
-      {/* Drop Zone - Visible unless max files reached */}
+      {/* MOBILE SCAN BUTTON (md:hidden) */}
+      {!isMaxed && !disabled && (
+        <div className="md:hidden">
+          <input
+            type="file"
+            ref={cameraInputRef}
+            onChange={handleChange}
+            accept="image/*"
+            capture="environment" // Forces rear camera on mobile
+            className="hidden"
+          />
+          <button
+            onClick={() => cameraInputRef.current?.click()}
+            className="w-full py-5 bg-slate-900 border-2 border-cyan-400 text-cyan-400 rounded-xl font-bold tracking-widest shadow-[0_0_20px_rgba(34,211,238,0.3)] animate-pulse flex items-center justify-center space-x-3 active:scale-95 transition-transform uppercase text-sm relative overflow-hidden group"
+          >
+            <div className="absolute inset-0 bg-cyan-400/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+            <Aperture className="w-6 h-6 relative z-10" />
+            <span className="relative z-10">{t.initScan || "INITIALIZE SCAN"}</span>
+          </button>
+          <div className="mt-3 text-center">
+             <p className="text-[10px] text-slate-500 uppercase tracking-widest font-medium">Or select from library</p>
+             <button onClick={() => fileInputRef.current?.click()} className="mt-2 text-xs font-semibold text-indigo-500 underline">Browse Files</button>
+          </div>
+        </div>
+      )}
+
+      {/* DESKTOP DROP ZONE (hidden md:flex) */}
       {!isMaxed && (
         <div
             onDragOver={handleDragOver}
@@ -126,12 +154,13 @@ export const FileUpload: React.FC<FileUploadProps> = ({
             onDrop={handleDrop}
             onClick={() => !disabled && fileInputRef.current?.click()}
             className={`
+            hidden md:flex
             w-full p-6 sm:p-8 border-2 border-dashed rounded-2xl cursor-pointer transition-all duration-500 ease-out relative overflow-hidden group
-            flex flex-col items-center justify-center space-y-3
+            flex-col items-center justify-center space-y-3
             ${isDragging 
                 ? 'border-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 scale-[1.01] shadow-[0_0_40px_-10px_rgba(99,102,241,0.3)]' 
                 : 'border-slate-300 dark:border-slate-700/50 bg-white/50 dark:bg-slate-800/20 hover:bg-white/80 dark:hover:bg-slate-800/40 hover:border-indigo-500/30 hover:shadow-[0_0_30px_-5px_rgba(99,102,241,0.15)]'}
-            ${disabled ? 'opacity-50 cursor-not-allowed hidden' : ''}
+            ${disabled ? 'opacity-50 cursor-not-allowed !hidden' : ''}
             `}
         >
             <input

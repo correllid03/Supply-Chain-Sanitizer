@@ -30,21 +30,22 @@ interface BarSegment {
   subtext?: string;
 }
 
-const AnalyticsBar = ({ title, icon: Icon, segments }: { title: string, icon: any, segments: BarSegment[] }) => {
+const AnalyticsBar = ({ title, icon: Icon, segments, warning }: { title: string, icon: any, segments: BarSegment[], warning?: boolean }) => {
   if (!segments || segments.length === 0) return null;
 
   return (
     <div className="pt-4 border-t border-slate-200 dark:border-white/5 first:border-0 first:pt-0">
       <div className="flex items-center space-x-2 mb-3">
-         <Icon className={`w-3.5 h-3.5 text-slate-500`} />
-         <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{title}</h4>
+         <Icon className={`w-3.5 h-3.5 ${warning ? 'text-amber-500' : 'text-slate-500'}`} />
+         <h4 className={`text-[10px] font-bold uppercase tracking-widest ${warning ? 'text-amber-600 dark:text-amber-500' : 'text-slate-500'}`}>{title}</h4>
       </div>
-      <div className="w-full h-4 bg-slate-100 dark:bg-slate-800 rounded-full flex overflow-hidden shadow-inner ring-1 ring-black/5 dark:ring-white/5">
+      {/* Use flex to distribute width based on value, ensuring 100% fill without gaps */}
+      <div className="w-full h-4 rounded-full flex overflow-hidden shadow-inner ring-1 ring-black/5 dark:ring-white/5 bg-slate-100 dark:bg-slate-800">
         {segments.map((s, i) => (
           <div 
             key={i}
             className="h-full relative group transition-all duration-1000 ease-out border-r last:border-0 border-white/10"
-            style={{ width: `${s.percentage}%`, backgroundColor: s.color }}
+            style={{ flex: s.value, backgroundColor: s.color }}
             title={`${s.label}: ${s.subtext || s.value}`}
           />
         ))}
@@ -60,57 +61,12 @@ const AnalyticsBar = ({ title, icon: Icon, segments }: { title: string, icon: an
           </div>
         ))}
       </div>
-    </div>
-  );
-};
-
-// --- HOLLOW DONUT CHART (FOR DOC COMPOSITION) ---
-const DonutChart = ({ data, total, title, warning }: { data: { label: string; value: number; color: string }[], total: number, title: string, warning?: boolean }) => {
-  let currentAngle = 0;
-  return (
-    <div className="pt-4 border-t border-slate-200 dark:border-white/5">
-        <div className="flex items-center space-x-2 mb-3">
-            <PieChart className={`w-3.5 h-3.5 ${warning ? 'text-amber-500' : 'text-slate-500'}`} />
-            <h4 className={`text-[10px] font-bold uppercase tracking-widest ${warning ? 'text-amber-600 dark:text-amber-500' : 'text-slate-500'}`}>{title}</h4>
-        </div>
-        <div className="flex items-center space-x-4">
-            <div className="relative w-20 h-20 shrink-0">
-                <svg viewBox="0 0 100 100" className="transform -rotate-90 w-full h-full">
-                    {data.map((item, i) => {
-                        const angle = (item.value / total) * 360;
-                        const x1 = 50 + 40 * Math.cos((Math.PI * currentAngle) / 180);
-                        const y1 = 50 + 40 * Math.sin((Math.PI * currentAngle) / 180);
-                        const x2 = 50 + 40 * Math.cos((Math.PI * (currentAngle + angle)) / 180);
-                        const y2 = 50 + 40 * Math.sin((Math.PI * (currentAngle + angle)) / 180);
-                        const largeArc = angle > 180 ? 1 : 0;
-                        const d = `M 50 50 L ${x1} ${y1} A 40 40 0 ${largeArc} 1 ${x2} ${y2} Z`;
-                        currentAngle += angle;
-                        return <path key={i} d={d} fill={item.color} stroke="transparent" />;
-                    })}
-                    <circle cx="50" cy="50" r="28" className="fill-white dark:fill-slate-900" />
-                </svg>
-                <div className="absolute inset-0 flex items-center justify-center flex-col">
-                    <span className="text-xs font-bold text-slate-800 dark:text-white">{total}</span>
-                </div>
-            </div>
-            <div className="flex-1 space-y-1.5">
-                {data.map((item, i) => (
-                    <div key={i} className="flex items-center justify-between text-[10px]">
-                        <div className="flex items-center">
-                            <div className="w-2 h-2 rounded-full mr-2" style={{ backgroundColor: item.color }} />
-                            <span className="text-slate-600 dark:text-slate-400">{item.label}</span>
-                        </div>
-                        <span className="font-bold text-slate-800 dark:text-white">{item.value}</span>
-                    </div>
-                ))}
-            </div>
-        </div>
-        {warning && (
-            <div className="mt-3 p-2 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-md flex items-center space-x-2">
-                <AlertTriangle className="w-3 h-3 text-amber-500" />
-                <span className="text-[9px] font-medium text-amber-700 dark:text-amber-400">Red Flag: No supporting docs (POs/Receipts)</span>
-            </div>
-        )}
+      {warning && (
+          <div className="mt-3 p-2 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-md flex items-center space-x-2 animate-pulse">
+              <AlertTriangle className="w-3 h-3 text-amber-500" />
+              <span className="text-[9px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wide">Red Flag: No supporting docs</span>
+          </div>
+      )}
     </div>
   );
 };
@@ -179,14 +135,15 @@ export const SessionSidebar: React.FC<SessionSidebarProps> = ({
     });
     
     const totalItems = Object.values(catCounts).reduce((a, b) => a + b, 0);
-    const expenseSegments: BarSegment[] = Object.entries(catCounts)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 4) 
-      .map(([label, value], i) => ({ 
-        label, value, percentage: (value / totalItems) * 100,
-        color: ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#3b82f6'][i % 5],
-        subtext: `${value} items`
-      }));
+    const sortedCats = Object.entries(catCounts).sort(([, a], [, b]) => b - a);
+    
+    // Updated logic: Show all categories with cycling colors to avoid 'Other' placeholder
+    const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#3b82f6', '#8b5cf6', '#06b6d4', '#f43f5e', '#84cc16', '#14b8a6'];
+    const expenseSegments: BarSegment[] = totalItems > 0 ? sortedCats.map(([label, value], i) => ({ 
+      label, value, percentage: (value / totalItems) * 100,
+      color: COLORS[i % COLORS.length],
+      subtext: `${value} items`
+    })) : [];
 
     const totalDocs = history.length;
     const currencySegments: BarSegment[] = Object.entries(currencyCounts).sort(([, a], [, b]) => b - a).map(([code, count]) => {
@@ -206,21 +163,29 @@ export const SessionSidebar: React.FC<SessionSidebarProps> = ({
         return { label: lang, value: count, percentage: (count / totalDocs) * 100, color, subtext: `${lang === 'English' ? 95 : 99}% Conf.` };
     });
 
-    // DOC COMPOSITION DATA
-    const docCompData = [
-        { label: 'Invoice', value: typeCounts['Invoice'], color: '#4f46e5' },
-        { label: 'Receipt', value: typeCounts['Receipt'], color: '#10b981' },
-        { label: 'PO', value: typeCounts['PO'], color: '#f59e0b' },
-        { label: 'Other', value: typeCounts['Other'], color: '#94a3b8' }
-    ].filter(d => d.value > 0);
-    
-    // Red Flag if 100% Invoices (no supporting docs) and total > 1
+    // DOC COMPOSITION DATA -> Converted to BarSegment[] for AnalyticsBar
     const showRedFlag = typeCounts['Invoice'] === totalDocs && totalDocs > 1;
-    if (showRedFlag) {
-        docCompData[0].color = '#f59e0b'; // Turn invoices amber to signal warning
-    }
+    const docCompSegments: BarSegment[] = [
+        { label: 'Invoice', value: typeCounts['Invoice'], color: '#4f46e5' }, // Indigo
+        { label: 'Receipt', value: typeCounts['Receipt'], color: '#10b981' }, // Emerald
+        { label: 'PO', value: typeCounts['PO'], color: '#f59e0b' },      // Amber
+        { label: 'Other', value: typeCounts['Other'], color: '#94a3b8' }      // Slate
+    ]
+    .filter(s => s.value > 0)
+    .sort((a, b) => b.value - a.value)
+    .map(s => {
+        // Warning override for Invoices
+        if (s.label === 'Invoice' && showRedFlag) {
+            s.color = '#f59e0b'; // Warn color
+        }
+        return {
+            ...s,
+            percentage: (s.value / totalDocs) * 100,
+            subtext: `${s.value} docs`
+        };
+    });
 
-    return { totalDocs, totalValueUSD, avgTime: totalTime / totalDocs / 1000, expenseSegments, currencySegments, languageSegments, docCompData, showRedFlag };
+    return { totalDocs, totalValueUSD, avgTime: totalTime / totalDocs / 1000, expenseSegments, currencySegments, languageSegments, docCompSegments, showRedFlag };
   }, [history]);
 
   return (
@@ -272,8 +237,8 @@ export const SessionSidebar: React.FC<SessionSidebarProps> = ({
             
             <AnalyticsBar title={t.spendingBreakdown} icon={TrendingUp} segments={stats.expenseSegments} />
             <AnalyticsBar title={t.currencyDist} icon={Coins} segments={stats.currencySegments} />
-            {/* NEW: DOC COMPOSITION CHART */}
-            <DonutChart title={t.docComposition || "Doc Composition"} total={stats.totalDocs} data={stats.docCompData} warning={stats.showRedFlag} />
+            {/* UPDATED: Doc Composition as AnalyticsBar */}
+            <AnalyticsBar title={t.docComposition || "Doc Composition"} icon={PieChart} segments={stats.docCompSegments} warning={stats.showRedFlag} />
             <AnalyticsBar title="Source Language" icon={Globe2} segments={stats.languageSegments} />
           </div>
         )}
