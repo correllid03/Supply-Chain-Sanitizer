@@ -3,8 +3,9 @@ import { FileUpload } from './components/FileUpload';
 import { InvoiceEditor } from './components/InvoiceEditor';
 import { SessionSidebar } from './components/SessionSidebar';
 import { Navbar } from './components/Navbar';
-import { extractInvoiceData, translateLineItems } from './services/geminiService';
-import { InvoiceData, ProcessingState } from './types';
+import { extractInvoiceData, translateLineItems, analyzeBatch } from './services/geminiService';
+import { StrategicInsights } from './components/StrategicInsights';
+import { InvoiceData, ProcessingState, StrategicInsight } from './types';
 import { Loader2, Download, Wand2, ShieldCheck, AlertCircle, Languages, Sun, Moon, Coins, Clock, RefreshCw, FileText, Globe2, Plane, Archive, Layers, AlertTriangle, Copy, Printer, FileJson, Table, X } from 'lucide-react';
 import { translations } from './utils/translations';
 import { EXAMPLES } from './utils/exampleData';
@@ -14,6 +15,10 @@ const App: React.FC = () => {
   const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null);
   const [sessionHistory, setSessionHistory] = useState<InvoiceData[]>([]);
   const [processingState, setProcessingState] = useState<ProcessingState>({ status: 'idle' });
+  
+  // TIER 4 STATE: Strategic Insights
+  const [strategicInsights, setStrategicInsights] = useState<StrategicInsight[]>([]);
+  const [showInsights, setShowInsights] = useState(false);
   
   // I18N SPLIT: Interface vs Data
   const [interfaceLanguage, setInterfaceLanguage] = useState<string>('English');
@@ -57,12 +62,14 @@ const App: React.FC = () => {
     setFiles(selectedFiles);
     setProcessingState({ status: 'idle' });
     setRetryCountdown(0);
+    setShowInsights(false);
   };
 
   const handleClearFile = () => {
     setFiles([]);
     setProcessingState({ status: 'idle' });
     setRetryCountdown(0);
+    setShowInsights(false);
   };
 
   const handleError = (message: string, code: any) => {
@@ -106,7 +113,11 @@ const App: React.FC = () => {
     if (files.length === 0) return;
 
     setProcessingState({ status: 'processing', message: t.processing }); 
+    setShowInsights(false);
     
+    // Accumulate the batch locally since state updates are async
+    const currentBatch: InvoiceData[] = [];
+
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const startTime = Date.now();
@@ -148,6 +159,8 @@ const App: React.FC = () => {
                 continue; 
             }
 
+            // Add to local batch and state
+            currentBatch.push(dataWithId);
             setSessionHistory(prev => [dataWithId, ...prev]);
 
             if (i === files.length - 1) {
@@ -179,6 +192,24 @@ const App: React.FC = () => {
         }
     }
 
+    // --- TIER 4 AUDIT TRIGGER ---
+    if (currentBatch.length > 1 || sessionHistory.length > 0) {
+        setProcessingState({ status: 'processing', message: '⚡ Running Strategic Supply Chain Audit...' });
+        
+        // Analyze recent history + current batch
+        const analysisSet = [...currentBatch, ...sessionHistory].slice(0, 15);
+        
+        try {
+            const auditResult = await analyzeBatch(analysisSet);
+            if (auditResult.insights && auditResult.insights.length > 0) {
+                setStrategicInsights(auditResult.insights);
+                setShowInsights(true);
+            }
+        } catch (e) {
+            console.error("Audit failed", e);
+        }
+    }
+
     setProcessingState({ status: 'complete' });
     setRetryCountdown(0);
     setFiles([]); 
@@ -206,6 +237,8 @@ const App: React.FC = () => {
     setFiles([]);
     setInvoiceData(null);
     setSessionHistory([]);
+    setStrategicInsights([]);
+    setShowInsights(false);
     setProcessingState({ status: 'idle' });
     setShowClearConfirm(false);
     setClearNotification(t.dataClearedSuccess);
@@ -252,6 +285,7 @@ const App: React.FC = () => {
         setFiles([]);
         setInvoiceData(null);
         setProcessingState({ status: 'idle' });
+        setShowInsights(false);
     }
   };
 
@@ -260,6 +294,7 @@ const App: React.FC = () => {
     setInvoiceData(null);
     setProcessingState({ status: 'idle' });
     setShowHomeConfirm(false);
+    setShowInsights(false);
   };
 
   const cancelNavigateHome = () => {
@@ -274,6 +309,7 @@ const App: React.FC = () => {
     setInvoiceData(null);
     setProcessingState({ status: 'idle' });
     setShowMobileHistory(false);
+    setShowInsights(false);
   }, [invoiceData, t.unsavedChanges]);
 
 
@@ -360,17 +396,17 @@ const App: React.FC = () => {
     if (format === 'csv') {
        const headers = [t.csvDocumentType, t.csvVendor, t.csvDate, t.csvTotalAmount, t.csvCurrency, t.csvSku, t.csvDescription, t.csvGlCategory, t.csvQuantity, t.csvUnitPrice, t.csvLineTotal];
        const allRows = data.flatMap(doc => doc.lineItems.map(item => [
-            `"${(doc.documentType || 'Unknown').replace(/"/g, '""')}"`,
-            `"${doc.vendorName.replace(/"/g, '""')}"`,
-            doc.invoiceDate,
-            doc.totalAmount,
-            doc.currencySymbol || '$',
-            `"${(item.sku || '').replace(/"/g, '""')}"`,
-            `"${item.description.replace(/"/g, '""')}"`,
-            `"${(item.glCategory || '').replace(/"/g, '""')}"`,
-            item.quantity,
-            item.unitPrice,
-            (item.totalAmount || 0).toFixed(2)
+           `"${(doc.documentType || 'Unknown').replace(/"/g, '""')}"`,
+           `"${doc.vendorName.replace(/"/g, '""')}"`,
+           doc.invoiceDate,
+           doc.totalAmount,
+           doc.currencySymbol || '$',
+           `"${(item.sku || '').replace(/"/g, '""')}"`,
+           `"${item.description.replace(/"/g, '""')}"`,
+           `"${(item.glCategory || '').replace(/"/g, '""')}"`,
+           item.quantity,
+           item.unitPrice,
+           (item.totalAmount || 0).toFixed(2)
        ]));
        return [headers.join(','), ...allRows.map(row => row.join(','))].join('\n');
     }
@@ -547,21 +583,31 @@ const App: React.FC = () => {
                         </div>
 
                         {currentView === 'editor' && invoiceData && (
-                        <div className="lg:col-span-4 space-y-6 min-w-0 animate-in fade-in slide-in-from-right-4 duration-500">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                                <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-wide flex items-center"><span className="w-2 h-6 bg-indigo-500 rounded-full mr-3"></span>{t.extractedData}</h2>
-                                <div className="flex items-center gap-2">
-                                    {isTranslating && (<span className="flex items-center text-xs font-semibold text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/10 px-3 py-1.5 rounded-full animate-pulse border border-indigo-200 dark:border-indigo-500/20 mr-2"><Languages className="w-3 h-3 mr-2" />{t.translating}</span>)}
-                                    <button onClick={handleCopyToClipboard} className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg shadow-sm transition-all" title={t.copyToClipboard}><Copy className="w-4 h-4" /><span>Copy Data</span></button>
-                                    <button onClick={handleDownloadExcel} className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg shadow-sm transition-all" title="Save as Excel"><Table className="w-4 h-4" /><span>Save Excel</span></button>
-                                    <button onClick={() => window.print()} className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg shadow-sm transition-all" title={t.printPdf}><Printer className="w-4 h-4" /><span>Print / PDF</span></button>
-                                    <button onClick={handleDownloadMain} className="flex items-center gap-2 px-3 py-2 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/30 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 text-xs font-bold rounded-lg shadow-sm transition-all ml-1" title={t.exportCsv}><Download className="w-3.5 h-3.5" /><span>Export {exportFormat === 'csv' ? 'CSV' : exportFormat.toUpperCase()}</span></button>
-                                </div>
+                        <>
+                            {/* CHANGED FROM 5 TO 4 TO FIX LAYOUT */}
+                            <div className="lg:col-span-4 mb-6">
+                              <StrategicInsights 
+                                  insights={strategicInsights} 
+                                  isVisible={showInsights} 
+                                  onClose={() => setShowInsights(false)} 
+                              />
                             </div>
-                            {exportNotification && (<div className="p-3 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-lg text-emerald-700 dark:text-emerald-400 text-xs font-bold text-center animate-in fade-in slide-in-from-top-2 duration-300">{exportNotification}</div>)}
-                            {invoiceData.hasSensitiveData && (<div className="p-4 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-xl flex items-start space-x-3 animate-in fade-in slide-in-from-top-2"><AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-500 shrink-0 mt-0.5" /><div><h3 className="text-sm font-bold text-amber-800 dark:text-amber-400">{t.sensitiveDetected}: <span className="font-normal text-amber-700 dark:text-amber-300">{invoiceData.sensitiveDataTypes?.join(', ')}</span></h3><p className="text-xs text-amber-600 dark:text-amber-500/80 mt-1">{t.complianceWarning}</p></div></div>)}
-                            <InvoiceEditor data={invoiceData} onChange={handleInvoiceChange} t={t} targetCurrency={targetCurrency} />
-                        </div>
+                            <div className="lg:col-span-4 space-y-6 min-w-0 animate-in fade-in slide-in-from-right-4 duration-500">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                    <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-wide flex items-center"><span className="w-2 h-6 bg-indigo-500 rounded-full mr-3"></span>{t.extractedData}</h2>
+                                    <div className="flex items-center gap-2">
+                                        {isTranslating && (<span className="flex items-center text-xs font-semibold text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/10 px-3 py-1.5 rounded-full animate-pulse border border-indigo-200 dark:border-indigo-500/20 mr-2"><Languages className="w-3 h-3 mr-2" />{t.translating}</span>)}
+                                        <button onClick={handleCopyToClipboard} className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg shadow-sm transition-all" title={t.copyToClipboard}><Copy className="w-4 h-4" /><span>Copy Data</span></button>
+                                        <button onClick={handleDownloadExcel} className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg shadow-sm transition-all" title="Save as Excel"><Table className="w-4 h-4" /><span>Save Excel</span></button>
+                                        <button onClick={() => window.print()} className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg shadow-sm transition-all" title={t.printPdf}><Printer className="w-4 h-4" /><span>Print / PDF</span></button>
+                                        <button onClick={handleDownloadMain} className="flex items-center gap-2 px-3 py-2 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/30 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 text-xs font-bold rounded-lg shadow-sm transition-all ml-1" title={t.exportCsv}><Download className="w-3.5 h-3.5" /><span>Export {exportFormat === 'csv' ? 'CSV' : exportFormat.toUpperCase()}</span></button>
+                                    </div>
+                                </div>
+                                {exportNotification && (<div className="p-3 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-lg text-emerald-700 dark:text-emerald-400 text-xs font-bold text-center animate-in fade-in slide-in-from-top-2 duration-300">{exportNotification}</div>)}
+                                {invoiceData.hasSensitiveData && (<div className="p-4 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-xl flex items-start space-x-3 animate-in fade-in slide-in-from-top-2"><AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-500 shrink-0 mt-0.5" /><div><h3 className="text-sm font-bold text-amber-800 dark:text-amber-400">{t.sensitiveDetected}: <span className="font-normal text-amber-700 dark:text-amber-300">{invoiceData.sensitiveDataTypes?.join(', ')}</span></h3><p className="text-xs text-amber-600 dark:text-amber-500/80 mt-1">{t.complianceWarning}</p></div></div>)}
+                                <InvoiceEditor data={invoiceData} onChange={handleInvoiceChange} t={t} targetCurrency={targetCurrency} />
+                            </div>
+                        </>
                         )}
                     </div>
                 </div>

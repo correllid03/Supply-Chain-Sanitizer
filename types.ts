@@ -46,3 +46,14 @@ export interface ProcessingState {
   errorCode?: 'QUOTA_EXCEEDED' | 'READ_ERROR' | 'INVALID_FILE' | 'GENERIC';
   retryIn?: number; // Seconds until retry
 }
+
+export interface StrategicInsight {
+  type: 'critical' | 'warning' | 'opportunity';
+  title: string;
+  message: string;
+  potential_savings?: string;
+}
+
+export interface BatchAnalysisResult {
+  insights: StrategicInsight[];
+}

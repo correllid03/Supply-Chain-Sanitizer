@@ -3,6 +3,9 @@ import { InvoiceData, LineItem } from "../types";
 import { CURRENCY_RATES, getCurrencyCode } from '../utils/currency';
 import { translations } from '../utils/translations';
 
+// Initialize the Gemini API client
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
 const invoiceSchema = {
   type: Type.OBJECT,
   properties: {
@@ -39,7 +42,7 @@ const invoiceSchema = {
 };
 
 // Helper to clean garbage from numbers
-const cleanNumber = (val: any): number => {
+export const cleanNumber = (val: any): number => {
   if (typeof val === 'number') return val;
   if (!val) return 0;
   const cleaned = String(val).replace(/[^0-9.-]/g, '');
@@ -101,6 +104,17 @@ const generateMockInvoice = (): InvoiceData => {
   };
 };
 
+const detectSensitiveData = (text: string, types: string[]): boolean => {
+    if (!text) return false;
+    // Basic regex patterns for sensitive data
+    const patterns = [
+        /\b\d{3}-\d{2}-\d{4}\b/, // SSN-like
+        /\b(?:\d[ -]*?){13,16}\b/, // Credit card-like
+        /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/ // Email
+    ];
+    return patterns.some(p => p.test(text));
+};
+
 // Assess extraction quality and assign confidence score/flags
 const assessExtractionQuality = (data: InvoiceData): InvoiceData => {
   const flags = {
@@ -135,20 +149,13 @@ const assessExtractionQuality = (data: InvoiceData): InvoiceData => {
   }
 
   // Check 5: Unsupported Language
-  // If AI detected a language, check if we have a translation dictionary for it
   if (data.language && data.language !== 'Original') {
       const supportedLangs = Object.keys(translations);
-      // Expanded whitelist for common European/Asian trade languages even if UI doesn't fully support them yet
       const extendedWhitelist = [...supportedLangs, 'Italian', 'French', 'Dutch', 'Portuguese', 'Swedish', 'Danish'];
-      
       const isSupported = extendedWhitelist.some(lang => lang.toLowerCase() === data.language?.toLowerCase());
-      
-      // CONFIDENCE OVERRIDE: If confidence is > 90%, we trust it even if we don't have a UI translation for it.
-      // This prevents flagging valid invoices as "unsupported" just because we lack a dictionary.
       const confidence = data.languageConfidence || 0;
       
       if (!isSupported && confidence < 90) {
-           console.warn(`Unsupported Language Detected: ${data.language} (Confidence: ${confidence}%)`);
            flags.unsupportedLanguage = true;
       }
   }
@@ -159,13 +166,11 @@ const assessExtractionQuality = (data: InvoiceData): InvoiceData => {
   if (flags.missingMetadata || flags.unsupportedCurrency) {
     score = 'Low';
   } else if (flags.hasZeroPrices || flags.lowItemCount) {
-    // Note: Removed unsupportedLanguage from Medium score trigger if confidence is high
     score = 'Medium';
   }
 
-  // Check 6: PII / Sensitive Data Detection (Basic Heuristics)
+  // Check 6: PII / Sensitive Data Detection
   const sensitiveTypes: string[] = [];
-  const textContent = JSON.stringify(data);
   
   if (detectSensitiveData(data.vendorName || '', [])) sensitiveTypes.push('Vendor PII');
   data.lineItems.forEach(item => {
@@ -174,181 +179,179 @@ const assessExtractionQuality = (data: InvoiceData): InvoiceData => {
       }
   });
 
-  // Regex checks for common PII patterns
-  if (/\b\d{3}-\d{2}-\d{4}\b/.test(textContent)) sensitiveTypes.push('SSN');
-  if (/\b(?:\d[ -]*?){13,16}\b/.test(textContent)) sensitiveTypes.push('Credit Card');
+  if (sensitiveTypes.length > 0) {
+      data.hasSensitiveData = true;
+      data.sensitiveDataTypes = sensitiveTypes;
+  }
 
-  return {
-    ...data,
-    confidenceScore: score,
-    validationFlags: flags,
-    hasSensitiveData: sensitiveTypes.length > 0,
-    sensitiveDataTypes: sensitiveTypes.length > 0 ? sensitiveTypes : undefined
-  };
+  data.confidenceScore = score;
+  data.validationFlags = flags;
+
+  return data;
 };
 
-// Helper for sensitive data keywords
-const detectSensitiveData = (text: string, types: string[]): boolean => {
-    const keywords = ["SSN", "Social Security", "Tax ID", "EIN", "Taxpayer", "Passport", "Driver License", "Credit Card", "Account Number"];
-    const lowerText = text.toLowerCase();
-    return keywords.some(kw => lowerText.includes(kw.toLowerCase()));
+const fileToGenerativePart = async (file: File) => {
+  return new Promise<{inlineData: {data: string, mimeType: string}}>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64String = (reader.result as string).split(',')[1];
+      resolve({
+        inlineData: {
+          data: base64String,
+          mimeType: file.type
+        }
+      });
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 };
 
-// Local Learning System
-const applyLearnedCorrections = (items: LineItem[]): LineItem[] => {
+export const extractInvoiceData = async (file: File, isDemoMode: boolean): Promise<InvoiceData> => {
+    if (isDemoMode) {
+        await new Promise(r => setTimeout(r, 1500));
+        return generateMockInvoice();
+    }
+
+    const imagePart = await fileToGenerativePart(file);
+    const model = 'gemini-2.5-flash';
+
+    const prompt = `Extract invoice data from this image. 
+    Analyze the layout to identify Vendor, Date, Total Amount, Currency, and Line Items.
+    Infer GL Categories for items.
+    Detect the document language.
+    Return JSON matching the specified schema.`;
+
     try {
-        const learnedData = localStorage.getItem('ester_learned_corrections');
-        if (!learnedData) return items;
-        
-        const corrections = JSON.parse(learnedData) as Record<string, string>; // keyword -> category
-        
-        return items.map(item => {
-            const descLower = item.description.toLowerCase();
-            // Check if description contains any learned keyword
-            const matchedKeyword = Object.keys(corrections).find(key => descLower.includes(key.toLowerCase()));
-            
-            if (matchedKeyword) {
-                return {
-                    ...item,
-                    glCategory: corrections[matchedKeyword],
-                    glReasoning: `Learned from previous correction: '${matchedKeyword}' -> '${corrections[matchedKeyword]}'`,
-                    glConfidence: 99
-                };
+        const response = await ai.models.generateContent({
+            model: model,
+            contents: {
+                parts: [imagePart, { text: prompt }]
+            },
+            config: {
+                responseMimeType: 'application/json',
+                responseSchema: invoiceSchema,
+                temperature: 0.1
             }
-            return item;
         });
-    } catch (e) {
+        
+        const rawData = JSON.parse(response.text || '{}');
+        const processedData: InvoiceData = {
+            ...rawData,
+            id: crypto.randomUUID(),
+            lineItems: rawData.lineItems || [],
+            invoiceDate: rawData.invoiceDate || new Date().toISOString().split('T')[0],
+            currencySymbol: rawData.currencySymbol || '$',
+            language: rawData.language || 'Original',
+            originalLineItems: rawData.lineItems || []
+        };
+        
+        return assessExtractionQuality(processedData);
+    } catch (error: any) {
+        console.error("Gemini API Error:", error);
+        if (error.message?.includes('429')) {
+             const e: any = new Error('Quota Exceeded');
+             e.code = 'QUOTA_EXCEEDED';
+             throw e;
+        }
+        throw error;
+    }
+};
+
+export const translateLineItems = async (items: LineItem[], targetLanguage: string): Promise<LineItem[]> => {
+    const prompt = `Translate the description of these invoice items into ${targetLanguage}.
+    Return a JSON array of objects with 'index' and 'translatedDescription'.
+    
+    Items:
+    ${items.map((item, i) => `${i}: ${item.description}`).join('\n')}
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                responseMimeType: 'application/json',
+                responseSchema: {
+                    type: Type.ARRAY,
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            index: { type: Type.NUMBER },
+                            translatedDescription: { type: Type.STRING }
+                        }
+                    }
+                }
+            }
+        });
+
+        const translations = JSON.parse(response.text || '[]');
+        const translationMap: Record<number, string> = {};
+        translations.forEach((t: any) => {
+            translationMap[t.index] = t.translatedDescription;
+        });
+
+        return items.map((item, i) => ({
+            ...item,
+            description: translationMap[i] || item.description
+        }));
+    } catch (error) {
+        console.error("Translation Error:", error);
         return items;
     }
 };
 
-export const extractInvoiceData = async (file: File, isDemoMode: boolean = false): Promise<InvoiceData> => {
-  if (isDemoMode) {
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    return generateMockInvoice();
-  }
+export const analyzeBatch = async (invoices: InvoiceData[]): Promise<any> => {
+    // 1. Minify data to save tokens (Gemini doesn't need UI flags to find fraud)
+    const cleanData = invoices.map(inv => ({
+        vendor: inv.vendorName,
+        date: inv.invoiceDate,
+        total: inv.totalAmount,
+        currency: inv.currencySymbol,
+        items: inv.lineItems.map(item => ({
+            desc: item.description,
+            qty: item.quantity,
+            price: item.unitPrice,
+            total: item.totalAmount,
+            category: item.glCategory
+        }))
+    }));
 
-  // MOVED INITIALIZATION INSIDE FUNCTION
-  // This prevents potential issues with stale client instances or API key availability race conditions
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const prompt = `
+    ACT AS A SENIOR SUPPLY CHAIN AUDITOR. 
+    Analyze this batch of ${invoices.length} invoices for strategic insights.
 
-  try {
-    const base64Data = await fileToGenerativePart(file);
+    DATASET:
+    ${JSON.stringify(cleanData)}
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              data: base64Data,
-              mimeType: file.type,
-            },
-          },
-          {
-            text: `Analyze this supply chain document.
-CORE OBJECTIVE: EXTRACT EVERY SINGLE LINE ITEM.
-LANGUAGE DETECTION RULES:
-- Scan for "Rechnung", "Steuernummer", "USt" -> Source Language = German
-- Scan for "請求書", "円", "税" -> Source Language = Japanese
-- Scan for "Facture", "TVA" -> Source Language = French
-- Scan for "Fattura", "IVA" -> Source Language = Italian
+    DETECT THESE PATTERNS:
+    1. PRICE VARIANCES: Same item bought at different prices?
+    2. VENDOR CONSOLIDATION: Buying same category (e.g. Office Supplies) from multiple vendors?
+    3. BULK OPPORTUNITIES: Multiple small orders to same vendor?
+    4. DUPLICATE VENDORS: "Office Depot" vs "Office Depot Inc".
 
-1. Extract SKU, Description, Quantity, Unit Price, Total.
-2. Infer 'glCategory' for each item. Provide 'glConfidence' (0-100) and 'glReasoning'.
-3. Detect the document 'language' (e.g. English, German, Japanese). Provide 'languageConfidence' (0-100).
-4. Identify 'currencySymbol' or code.
-5. Clean numbers (remove symbols).
-Output JSON.`
-          },
-        ],
-      },
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: invoiceSchema,
-        temperature: 0.1,
-        maxOutputTokens: 8192,
-      },
-    }).catch(e => {
-       if (e.message?.includes('429') || e.status === 429) {
-         const error: any = new Error('Quota Exceeded');
-         error.code = 'QUOTA_EXCEEDED';
-         throw error;
-       }
-       throw e;
-    });
+    OUTPUT STRICT JSON ONLY:
+    {
+      "insights": [
+        {
+          "type": "critical" | "warning" | "opportunity",
+          "title": "Short Headline",
+          "message": "2-sentence explanation with numbers.",
+          "potential_savings": "$XX.XX" (optional)
+        }
+      ]
+    }
+    `;
 
-    const text = response.text;
-    if (!text) throw new Error("No data returned");
-
-    const data = JSON.parse(text) as InvoiceData;
-
-    // Post-processing
-    let sanitizedLineItems = data.lineItems.map(item => {
-      let unitPrice = cleanNumber(item.unitPrice);
-      let totalAmount = cleanNumber(item.totalAmount);
-      let quantity = cleanNumber(item.quantity);
-
-      if ((unitPrice === 0) && quantity > 0 && totalAmount > 0) unitPrice = parseFloat((totalAmount / quantity).toFixed(2));
-      if (totalAmount === 0 && quantity > 0 && unitPrice > 0) totalAmount = parseFloat((quantity * unitPrice).toFixed(2));
-
-      return { ...item, quantity, unitPrice, totalAmount };
-    });
-    
-    // Apply Learning
-    sanitizedLineItems = applyLearnedCorrections(sanitizedLineItems);
-
-    const result = {
-      ...data,
-      totalAmount: cleanNumber(data.totalAmount),
-      lineItems: sanitizedLineItems,
-      detectedLanguage: data.language // Map extracted language to detected
-    };
-
-    return assessExtractionQuality(result);
-
-  } catch (error: any) {
-    if (!error.code) error.code = 'GENERIC';
-    throw error;
-  }
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: { responseMimeType: 'application/json' }
+        });
+        return JSON.parse(response.text || '{ "insights": [] }');
+    } catch (error) {
+        console.error("Audit Failed:", error);
+        return { insights: [] };
+    }
 };
-
-export const translateLineItems = async (items: LineItem[], targetLanguage: string): Promise<LineItem[]> => {
-  if (items.length === 0) return items;
-  // MOVED INITIALIZATION INSIDE FUNCTION
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  try {
-     const prompt = `Translate 'description' and 'glCategory' to ${targetLanguage}. Return JSON array of objects with index, translatedDescription, translatedCategory. Input: ${JSON.stringify(items.map((item, i) => ({index: i, desc: item.description, cat: item.glCategory})))}`;
-     
-     const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: { parts: [{ text: prompt }] },
-        config: { responseMimeType: "application/json" }
-     });
-     const raw = JSON.parse(response.text);
-     
-     const translationMap = raw.reduce((acc: any, curr: any) => {
-         acc[curr.index] = curr;
-         return acc;
-     }, {});
-
-     return items.map((item, index) => {
-         const translation = translationMap[index];
-         if (translation) {
-             return { ...item, description: translation.translatedDescription || item.description, glCategory: translation.translatedCategory || item.glCategory };
-         }
-         return item;
-     });
-  } catch (e) {
-      return items;
-  }
-};
-
-async function fileToGenerativePart(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
